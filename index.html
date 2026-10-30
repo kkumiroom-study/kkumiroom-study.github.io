@@ -126,6 +126,9 @@ button,input{font:inherit;color:inherit}
 .stat{margin:0;display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;font-size:13.5px;color:var(--paper);pointer-events:auto;white-space:nowrap}
 .stat b{font-family:var(--f-mono);font-size:16px;color:var(--lamp);font-variant-numeric:tabular-nums}
 .stat i{width:1px;height:14px;background:var(--line);margin:0 4px}
+.view-ctl{position:fixed;z-index:4;right:max(16px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.vbtn{width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;color:var(--paper);cursor:pointer;display:grid;place-items:center;padding:0}
+.vhome{border-radius:999px;padding:9px 14px;font-size:13px;font-weight:600;color:var(--lamp);cursor:pointer;white-space:nowrap}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;background:var(--paper);color:var(--night)}
 
 .bottom{display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -148,6 +151,10 @@ button,input{font:inherit;color:inherit}
 .ticket{--notch:72px;width:min(400px,100%);background:var(--ticket);color:var(--ticket-ink);border-radius:14px;padding:14px 18px 16px;display:grid;gap:12px;box-shadow:0 22px 60px rgba(0,0,0,.5);
   -webkit-mask:radial-gradient(circle 9px at 0 var(--notch),#0000 96%,#000) left/51% 100% no-repeat,radial-gradient(circle 9px at 100% var(--notch),#0000 96%,#000) right/51% 100% no-repeat;
   mask:radial-gradient(circle 9px at 0 var(--notch),#0000 96%,#000) left/51% 100% no-repeat,radial-gradient(circle 9px at 100% var(--notch),#0000 96%,#000) right/51% 100% no-repeat}
+.t-fold{border:1px solid var(--ticket-line);background:transparent;color:var(--ticket-ink);border-radius:999px;padding:3px 10px;font:600 11px var(--f-ui);cursor:pointer;margin-top:2px}
+.ticket.mini{gap:6px}
+.ticket.mini > :not(.t-head):not(.t-timer){display:none}
+.ticket.mini .t-timer output{font-size:28px}
 .t-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;height:46px;padding-bottom:11px;border-bottom:1.5px dashed var(--ticket-line)}
 .eyebrow{display:block;font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--ticket-sub);line-height:16px}
 .t-head h2{margin:0;font-family:var(--f-display);font-weight:700;font-size:22px;line-height:30px;white-space:nowrap}
@@ -233,7 +240,7 @@ button,input{font:inherit;color:inherit}
     </div>
     <div id="nickPop" class="pop glass right" hidden>
       <h3>내 모습</h3>
-      <label class="field" for="nickInput">열람실에서 보일 이름<input id="nickInput" maxlength="12" autocomplete="off"></label>
+      <p class="note">이름은 들어올 때 자동으로 정해져요: <b id="nickShow"></b></p>
       <div class="field"><span>옷 색</span><div id="swatches" class="swatches" role="radiogroup" aria-label="옷 색"></div></div>
       <button id="nickSave" class="btn">저장</button>
     </div>
@@ -267,7 +274,7 @@ button,input{font:inherit;color:inherit}
     <section id="ticket" class="ticket" hidden aria-label="좌석 이용증">
       <div class="t-head">
         <div><span class="eyebrow">좌석 이용증</span><h2 id="tSeat">개인석 01</h2></div>
-        <div class="t-meta"><span id="tIn">입실 00:00</span><span>꿈이룸</span></div>
+        <div class="t-meta"><span id="tIn">입실 00:00</span><button id="tFold" class="t-fold" aria-expanded="true">접기</button></div>
       </div>
       <div class="t-timer"><output id="tTimer">00:00:00</output><span id="tSub">이번 세션 순공 시간</span></div>
       <div id="tBarWrap" class="t-bar" hidden><i id="tBar"></i></div>
@@ -285,6 +292,11 @@ button,input{font:inherit;color:inherit}
 </div>
 
 <button id="sndHint" class="snd-hint" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>눌러서 빗소리 켜기</button>
+<div class="view-ctl" aria-label="화면 보기">
+  <button id="zoomIn" class="vbtn glass" aria-label="확대">+</button>
+  <button id="zoomOut" class="vbtn glass" aria-label="축소">−</button>
+  <button id="viewHome" class="vhome glass" hidden>내 자리로</button>
+</div>
 <div id="toast" class="toast glass show" role="status" aria-live="polite">꿈을 이루는 열람실, <b>꿈이룸</b>에 들어왔어요. <b>자리잡기</b>를 누르면 가장 가까운 빈자리로 안내해요. </div>
 
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
@@ -360,7 +372,8 @@ const ANI=['부엉이','고양이','수달','다람쥐','펭귄','여우','토�
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const cleanText=(s,n)=>String(s).replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯﻿]/g,'').trim().slice(0,n);
 
-let nick=cleanText(store.get('nick','')||'',12)||(pick(ADJ)+' '+pick(ANI));
+const isAutoName=n=>typeof n==='string'&&ADJ.some(a=>ANI.some(b=>n===a+' '+b));
+let nick=isAutoName(store.get('nick',''))?store.get('nick'):(pick(ADJ)+' '+pick(ANI));
 let hue=Number.isFinite(store.get('hue',NaN))?store.get('hue'):pick(HUES);
 let hairIdx=Number.isInteger(store.get('hair',-1))&&store.get('hair')>=0?store.get('hair'):Math.floor(Math.random()*HAIR.length);
 let skinIdx=Number.isInteger(store.get('skin',-1))&&store.get('skin')>=0?store.get('skin'):Math.floor(Math.random()*SKIN.length);
@@ -1025,22 +1038,31 @@ document.addEventListener('visibilitychange',()=>{
 
 /* ---------- camera ---------- */
 let zoom=1,camL=0,camT=0,camReady=false;
+let viewZoom=1,panX=0,panY=0,dragging=false,lastSeatId=null;
+const viewMoved=()=>Math.abs(viewZoom-1)>.02||Math.abs(panX)>2||Math.abs(panY)>2;
+function setViewZoom(z){viewZoom=clamp(z,.35,3);syncViewBtns();}
+function resetView(){viewZoom=1;panX=panY=0;syncViewBtns();}
+function syncViewBtns(){$('viewHome').hidden=!viewMoved();$('viewHome').textContent=me.seat?'내 자리로':'내 위치로';}
 function updateCamera(dt){
   const ticket=$('ticket');
+  const sid=me.seat?me.seat.id:null;if(sid!==lastSeatId){lastSeatId=sid;panX=panY=0;syncViewBtns();}
   const topPad=64,botPad=me.seat?ticket.offsetHeight+28:112;
   const fit=Math.min(vw/(W*TS),(vh-topPad)/(H*TS));
   const across=clamp(Math.min(vw,vh)/40,11,17);
   const base=clamp(Math.max(fit,Math.min(vw,vh)/(across*TS)),.5,2.4);
-  const zt=base*(me.seat?1.3:1);
-  const k=(!camReady||reduceMotion)?1:Math.min(1,dt*4),k2=(!camReady||reduceMotion)?1:Math.min(1,dt*7);
+  const zt=clamp(base*(me.seat?1.3:1)*viewZoom,Math.max(.3,fit*.9),4);
+  const k=(!camReady||reduceMotion)?1:Math.min(1,dt*(dragging?14:4)),k2=(!camReady||reduceMotion||dragging)?1:Math.min(1,dt*7);
   zoom+=(zt-zoom)*k;
   const bandTop=topPad,bandBot=Math.max(bandTop+120,vh-botPad),bandH=bandBot-bandTop;
-  const fx=me.seat?me.seat.cx:me.x,fy=me.seat?me.seat.cy:me.y-14;
+  const bx=me.seat?me.seat.cx:me.x,by=me.seat?me.seat.cy:me.y-14,fx=bx+panX,fy=by+panY;
   let tl=fx-vw/(2*zoom),tt=fy-(bandTop+bandH/2)/zoom;
   const viewW=vw/zoom;
   tl=viewW>=W*TS?(W*TS-viewW)/2:clamp(tl,0,W*TS-viewW);
   const minT=-bandTop/zoom,maxT=H*TS-bandBot/zoom;
   tt=maxT<minT?(minT+maxT)/2:clamp(tt,minT,maxT);
+  // keep the pan inside the room so dragging past an edge does not build up
+  if(viewW<W*TS)panX=tl+vw/(2*zoom)-bx;else panX=0;
+  if(maxT>=minT)panY=tt+(bandTop+bandH/2)/zoom-by;else panY=0;
   camL+=(tl-camL)*k2;camT+=(tt-camT)*k2;camReady=true;
 }
 
@@ -1187,17 +1209,15 @@ function seatedHint(){const n=Date.now();if(n-seatedHintShown>4000){seatedHintSh
 addEventListener('keydown',e=>{
   if(isTyping(e.target))return;
   const d=CODE_DIR[e.code];
-  if(d){e.preventDefault();if(me.seat){seatedHint();return;}keys.add(d);if(path){path=null;pendingSeat=null;updateBottomUI();}return;}
+  if(d){e.preventDefault();if(me.seat){seatedHint();return;}keys.add(d);if(panX||panY){panX=panY=0;syncViewBtns();}if(path){path=null;pendingSeat=null;updateBottomUI();}return;}
   if(e.code==='Escape'){closePops();return;}
   if((e.code==='Space'||e.code==='Enter')&&(e.target===document.body||e.target===cvs)&&!me.seat){e.preventDefault();takeSeat();}
 });
 addEventListener('keyup',e=>{const d=CODE_DIR[e.code];if(d)keys.delete(d);});
 addEventListener('blur',()=>keys.clear());
 
-cvs.addEventListener('pointerdown',e=>{
-  closePops();
-  if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();
-  const wx=e.clientX/zoom+camL,wy=e.clientY/zoom+camT;
+function handleTap(cx,cy){
+  const wx=cx/zoom+camL,wy=cy/zoom+camT;
   const tx=Math.floor(wx/TS),ty=Math.floor(wy/TS);
   if(tx<0||ty<0||tx>=W||ty>=H)return;
   const c=grid[ty][tx];
@@ -1215,10 +1235,41 @@ cvs.addEventListener('pointerdown',e=>{
   const [sx,sy]=myTile();
   const res=bfs(sx,sy,(x,y)=>x===target[0]&&y===target[1]);
   if(!res)return;
-  pendingSeat=null;autoFast=false;setPath(res.tiles,null);
+  pendingSeat=null;autoFast=false;setPath(res.tiles,null);panX=panY=0;syncViewBtns();
   marker={x:target[0]*TS+16,y:target[1]*TS+20,t:performance.now()};
   updateBottomUI();
+}
+const ptrs=new Map();let drag=null,pinch=null;
+cvs.addEventListener('pointerdown',e=>{
+  closePops();
+  if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();
+  try{cvs.setPointerCapture(e.pointerId);}catch(_){}
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1)drag={x:e.clientX,y:e.clientY,moved:false};
+  else if(ptrs.size===2){const [p1,p2]=[...ptrs.values()];pinch={d:Math.hypot(p1.x-p2.x,p1.y-p2.y)||1,z:viewZoom};if(drag)drag.moved=true;}
 });
+cvs.addEventListener('pointermove',e=>{
+  const prev=ptrs.get(e.pointerId);if(!prev)return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&ptrs.size>=2){const [p1,p2]=[...ptrs.values()];setViewZoom(pinch.z*Math.hypot(p1.x-p2.x,p1.y-p2.y)/pinch.d);dragging=true;return;}
+  if(!drag)return;
+  if(!drag.moved&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>8)drag.moved=true;
+  if(drag.moved){panX-=(e.clientX-prev.x)/zoom;panY-=(e.clientY-prev.y)/zoom;dragging=true;syncViewBtns();}
+});
+const endPtr=e=>{
+  if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
+  if(ptrs.size<2)pinch=null;
+  if(ptrs.size===0){const d=drag;drag=null;dragging=false;if(e.type==='pointerup'&&d&&!d.moved)handleTap(e.clientX,e.clientY);}
+};
+cvs.addEventListener('pointerup',endPtr);cvs.addEventListener('pointercancel',endPtr);
+cvs.addEventListener('wheel',e=>{e.preventDefault();setViewZoom(viewZoom*Math.exp(-e.deltaY*.0015));},{passive:false});
+$('zoomIn').addEventListener('click',()=>setViewZoom(viewZoom*1.25));
+$('zoomOut').addEventListener('click',()=>setViewZoom(viewZoom/1.25));
+$('viewHome').addEventListener('click',resetView);
+// fold the seat ticket to see more of the room while seated
+const setFold=f=>{$('ticket').classList.toggle('mini',f);$('tFold').textContent=f?'펼치기':'접기';$('tFold').setAttribute('aria-expanded',String(!f));store.set('ticketMini',f);};
+$('tFold').addEventListener('click',()=>setFold(!$('ticket').classList.contains('mini')));
+setFold(store.get('ticketMini',false)===true);
 
 /* ---------- UI ---------- */
 const toastEl=$('toast');let toastTimer=0;
@@ -1264,19 +1315,17 @@ function togglePop(btn,pop,onOpen){
   if(open){toastEl.classList.remove('show');$(pop).hidden=false;$(btn).setAttribute('aria-expanded','true');if(onOpen)onOpen();}
 }
 $('peopleBtn').addEventListener('click',()=>togglePop('peopleBtn','peoplePop',renderPeople));
-$('nickBtn').addEventListener('click',()=>togglePop('nickBtn','nickPop',()=>{$('nickInput').value=nick;pendingHue=hue;renderSwatches();$('nickInput').focus();}));
+$('nickBtn').addEventListener('click',()=>togglePop('nickBtn','nickPop',()=>{$('nickShow').textContent=nick;pendingHue=hue;renderSwatches();}));
 let pendingHue=hue;
 function renderSwatches(){
   const box=$('swatches');box.replaceChildren();
   for(const h of HUES){const b=document.createElement('button');b.type='button';b.setAttribute('role','radio');b.setAttribute('aria-checked',String(h===pendingHue));b.setAttribute('aria-label',`색 ${h}`);b.style.background=shirtOf(h);b.addEventListener('click',()=>{pendingHue=h;renderSwatches();});box.append(b);}
 }
 function saveNick(){
-  const v=cleanText($('nickInput').value,12);if(v)nick=v;
   hue=pendingHue;me.hue=hue;store.set('nick',nick);store.set('hue',hue);
-  renderMe();closePops();toast('이름과 옷 색을 바꿨어요.');
+  renderMe();closePops();toast('옷 색을 바꿨어요.');
 }
 $('nickSave').addEventListener('click',saveNick);
-$('nickInput').addEventListener('keydown',e=>{if(e.key==='Enter')saveNick();});
 function renderMe(){$('nickTxt').textContent=nick;$('nickSwatch').style.background=shirtOf(hue);renderPeople();}
 
 function renderPeople(){
