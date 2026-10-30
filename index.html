@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0}</style>
 <title>꿈이룸</title>
+<script>
+(function(){var errs=[];
+function box(msg){var d=document.getElementById('kkErr');if(!d){d=document.createElement('div');d.id='kkErr';d.style.cssText='position:fixed;left:16px;right:16px;top:40%;z-index:99;background:#ece2cc;color:#2b1b04;padding:16px;border-radius:14px;font:14px/1.5 sans-serif;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)';(document.body||document.documentElement).appendChild(d);}
+d.innerHTML='<b>꿈이룸을 여는 중 문제가 생겼어요</b><br>이 화면을 캡처해서 보내 주세요.<br><small style="word-break:break-all;opacity:.75">'+msg+'</small><br><button onclick="location.replace(location.pathname+\'?r=\'+Date.now())" style="margin-top:10px;border:0;border-radius:999px;padding:10px 18px;background:#2b1b04;color:#ece2cc;font-weight:600">다시 열기</button>';}
+window.addEventListener('error',function(e){errs.push((e.message||'error')+' @'+(e.lineno||'?')+':'+(e.colno||'?'));});
+window.addEventListener('load',function(){setTimeout(function(){if(!window.__kkStarted){box((errs.join(' | ')||'시작 안 됨')+' / '+navigator.userAgent);}},4000);});
+})();
+</script>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0d1220">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -1672,6 +1680,7 @@ function start(data){
   connectRoom();
 }
 start(resume||{});
+window.__kkStarted=true;
 
 // 홈 화면에 추가 안내
 (()=>{
