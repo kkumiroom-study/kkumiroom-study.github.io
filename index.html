@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>:root{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0}</style>
 <title>꿈이룸</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0d1220">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="꿈이룸">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
@@ -184,6 +192,18 @@ button,input{font:inherit;color:inherit}
 .toast.slip b{font-family:var(--f-display);font-size:16px}
 .toast.slip .k{letter-spacing:.12em;color:var(--ticket-sub)}
 
+.install{position:fixed;left:16px;right:16px;margin:0 auto;max-width:440px;bottom:calc(112px + env(safe-area-inset-bottom,0px));z-index:9;
+  display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.45);box-sizing:border-box}
+.install[hidden]{display:none}
+.install img{border-radius:11px;flex:none}
+.i-txt{display:grid;gap:2px;min-width:0;flex:1}
+.i-txt b{font-size:14px}
+.i-txt span{font-size:12px;color:var(--muted);line-height:1.45}
+.i-btns{display:flex;gap:6px;flex:none}
+.install button{border:0;border-radius:999px;padding:9px 12px;font:600 13px var(--f-ui);cursor:pointer}
+.i-no{background:transparent;color:var(--muted)}
+.i-yes{background:var(--lamp);color:var(--lamp-ink)}
+@media (max-width:380px){.install{flex-wrap:wrap}.i-btns{width:100%;justify-content:flex-end}}
 @media (max-width:520px){
   .brand small,.chip .lbl{display:none}
   .chip{padding:9px 11px}
@@ -297,9 +317,13 @@ button,input{font:inherit;color:inherit}
   <button id="zoomOut" class="vbtn glass" aria-label="축소">−</button>
   <button id="viewHome" class="vhome glass" hidden>내 자리로</button>
 </div>
+<div id="install" class="install glass" role="dialog" aria-labelledby="installTitle" hidden>
+  <img src="/icon-192.png" alt="" width="44" height="44">
+  <div class="i-txt"><b id="installTitle">꿈이룸을 홈 화면에 추가할까요?</b><span id="installSub">앱처럼 바로 들어와서 공부할 수 있어요.</span></div>
+  <div class="i-btns"><button id="installNo" class="i-no" type="button">나중에</button><button id="installYes" class="i-yes" type="button">추가하기</button></div>
+</div>
 <div id="toast" class="toast glass show" role="status" aria-live="polite">꿈을 이루는 열람실, <b>꿈이룸</b>에 들어왔어요. <b>자리잡기</b>를 누르면 가장 가까운 빈자리로 안내해요. </div>
 
-<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -1572,8 +1596,12 @@ async function countHall(n){
   client.removeListener('message',h);client.unsubscribe(prefix+'+');
   return ids.size;
 }
+const MQTT_SRC=window.KKUM_MQTT||['/mqtt.min.js','https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js','https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js'];
+function loadScript(src,ms){return new Promise(res=>{const el=document.createElement('script');let done=false;const fin=ok=>{if(done)return;done=true;clearTimeout(t);res(ok);};const t=setTimeout(()=>fin(false),ms);el.src=src;el.async=true;el.onload=()=>fin(!!window.mqtt);el.onerror=()=>fin(false);document.head.appendChild(el);});}
+async function loadMqtt(){for(const src of MQTT_SRC){if(window.mqtt)return true;if(await loadScript(src,8000))return true;}return !!window.mqtt;}
 async function connectRoom(){
   try{
+    await loadMqtt();
     if(window.mqtt){
       const will={topic:ROOT+'lost',payload:JSON.stringify({id:uid}),qos:0,retain:false};
       for(const url of BROKERS){client=await openClient(url,will);if(client)break;}
@@ -1644,6 +1672,37 @@ function start(data){
   connectRoom();
 }
 start(resume||{});
+
+// 홈 화면에 추가 안내
+(()=>{
+  if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  const box=$('install');if(!box)return;
+  const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+  const ua=navigator.userAgent;
+  const ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const mobile=ios||/Android/i.test(ua);
+  const inApp=/KAKAOTALK|Instagram|FBAN|FBAV|NAVER|Line\//i.test(ua);
+  let snoozed=0;try{snoozed=+localStorage.getItem('kkum.installNo')||0;}catch(e){}
+  if(standalone||!mobile||Date.now()-snoozed<3*864e5)return;
+  let deferred=null;
+  const show=()=>{if(box.hidden){box.hidden=false;}};
+  const hide=()=>{box.hidden=true;};
+  addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;setTimeout(show,2500);});
+  addEventListener('appinstalled',()=>{hide();toast('홈 화면에 꿈이룸이 추가됐어요.',3000);});
+  if(ios||inApp){
+    $('installSub').textContent=inApp?'오른쪽 위 ⋮ 메뉴에서 “다른 브라우저로 열기” 후 홈 화면에 추가해 주세요.':'아래 공유 버튼(□↑)을 누르고 “홈 화면에 추가”를 눌러 주세요.';
+    $('installYes').textContent='알겠어요';
+    setTimeout(show,2500);
+  }else{
+    // 일부 브라우저는 자동 설치 창이 없어서, 잠시 뒤 메뉴 안내로 보여줘요
+    setTimeout(()=>{if(!deferred){$('installSub').textContent='브라우저 메뉴(⋮ 또는 ≡)에서 “홈 화면에 추가”를 눌러 주세요.';$('installYes').textContent='알겠어요';show();}},6000);
+  }
+  $('installNo').onclick=()=>{hide();try{localStorage.setItem('kkum.installNo',Date.now());}catch(e){}};
+  $('installYes').onclick=async()=>{
+    if(deferred){deferred.prompt();try{const r=await deferred.userChoice;if(r.outcome!=='accepted')localStorage.setItem('kkum.installNo',Date.now());}catch(e){}deferred=null;hide();}
+    else{hide();try{localStorage.setItem('kkum.installNo',Date.now());}catch(e){}}
+  };
+})();
 })();
 </script>
 </body>
