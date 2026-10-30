@@ -15,8 +15,8 @@ window.addEventListener('load',function(){setTimeout(function(){if(!window.__kkS
 </script>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0d1220">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
-<link rel="icon" href="/icon-192.png?v=3">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4">
+<link rel="icon" href="/icon-192.png?v=4">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="꿈이룸">
@@ -142,6 +142,14 @@ button,input{font:inherit;color:inherit}
 .stat{margin:0;display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;font-size:13.5px;color:var(--paper);pointer-events:auto;white-space:nowrap}
 .stat b{font-family:var(--f-mono);font-size:16px;color:var(--lamp);font-variant-numeric:tabular-nums}
 .stat i{width:1px;height:14px;background:var(--line);margin:0 4px}
+button.stat{font:inherit;font-size:13.5px;cursor:pointer}
+.stat svg{width:14px;height:14px;color:var(--muted);margin-left:-2px}
+.stat[aria-expanded="true"] svg{transform:rotate(180deg)}
+.pop.center{align-self:center}
+.today-list .st{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.today-list .st.on{color:var(--lamp)}
+.today-list .nm em{font-style:normal;font-size:11px;margin-left:6px;color:var(--lamp)}
+.today-list .dot{width:7px;height:7px;border-radius:50%;background:#4fd18b;display:inline-block;margin-left:6px;vertical-align:middle}
 .view-ctl{position:fixed;z-index:4;right:max(16px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .vbtn{width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;color:var(--paper);cursor:pointer;display:grid;place-items:center;padding:0}
 .vhome{border-radius:999px;padding:9px 14px;font-size:13px;font-weight:600;color:var(--lamp);cursor:pointer;white-space:nowrap}
@@ -250,7 +258,12 @@ button,input{font:inherit;color:inherit}
         <button id="nickBtn" class="chip glass" aria-expanded="false" aria-controls="nickPop"><span class="swatch" id="nickSwatch" aria-hidden="true"></span><span id="nickTxt">이름</span></button>
       </div>
     </div>
-    <div class="stat-row"><p id="statPill" class="stat glass" hidden><span class="live" aria-hidden="true"></span>오늘 <b id="statToday">0</b>명이 함께 공부했어요<i aria-hidden="true"></i>지금 <b id="statNow">0</b>명</p></div>
+    <div class="stat-row"><button id="statPill" class="stat glass" type="button" aria-expanded="false" aria-controls="todayPop" hidden><span class="live" aria-hidden="true"></span>오늘 <b id="statToday">0</b>명이 함께 공부했어요<i aria-hidden="true"></i>지금 <b id="statNow">0</b>명<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+    <div id="todayPop" class="pop glass center" hidden>
+      <h3>오늘 함께 공부한 사람</h3>
+      <ul id="todayList" class="people today-list"></ul>
+      <p id="todayNote" class="note">오늘 꿈이룸에 다녀간 사람과 공부한 시간이에요. 밤 12시에 새로 시작해요.</p>
+    </div>
     <div id="peoplePop" class="pop glass" hidden>
       <h3>지금 열람실에 있는 사람</h3>
       <ul id="peopleList" class="people"></ul>
@@ -327,7 +340,7 @@ button,input{font:inherit;color:inherit}
   <button id="viewHome" class="vhome glass" hidden>내 자리로</button>
 </div>
 <div id="install" class="install glass" role="dialog" aria-labelledby="installTitle" hidden>
-  <img src="/icon-192.png?v=3" alt="" width="44" height="44">
+  <img src="/icon-192.png?v=4" alt="" width="44" height="44">
   <div class="i-txt"><b id="installTitle">꿈이룸을 홈 화면에 추가할까요?</b><span id="installSub">앱처럼 바로 들어와서 공부할 수 있어요.</span></div>
   <div class="i-btns"><button id="installNo" class="i-no" type="button">나중에</button><button id="installYes" class="i-yes" type="button">추가하기</button></div>
 </div>
@@ -341,6 +354,7 @@ const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const num=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
+const kstDay=ts=>{const d=new Date(ts+9*3600e3);return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate();};
 const isSeated=p=>!!p&&typeof p.s==='string'&&p.s!=='';
 let roomState='connecting',roomLive=false;
 const toastEl=$('toast');let toastTimer=0;
@@ -738,7 +752,9 @@ function drawCat(g,t){
 /* ---------- walking + collision ---------- */
 const occupiedByOther=(x,y)=>{const s=seatAt.get(y*W+x);return !!s&&s!==me.seat&&(NPC_SEATS.has(s.id)||othersSeat.has(s.id));};
 const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||SOLID.has(grid[y][x])||occupiedByOther(x,y);
-const isSeatFree=s=>!NPC_SEATS.has(s.id)&&!othersSeat.has(s.id);
+const ghostSeat=new Map();
+const isSeatOpen=s=>!NPC_SEATS.has(s.id)&&!othersSeat.has(s.id);
+const isSeatFree=s=>isSeatOpen(s)&&!ghostSeat.has(s.id);
 function collides(px,py){
   for(const [ox,oy] of [[-7,-5],[7,-5],[-7,3],[7,3]]){if(blocked(Math.floor((px+ox)/TS),Math.floor((py+oy)/TS)))return true;}
   return false;
@@ -777,7 +793,7 @@ function takeSeat(){
   if(me.seat)return;
   closePops();
   const [sx,sy]=myTile();
-  const res=bfs(sx,sy,(x,y)=>{const s=seatAt.get(y*W+x);return !!s&&isSeatFree(s);});
+  const res=bfs(sx,sy,(x,y)=>{const s=seatAt.get(y*W+x);return !!s&&isSeatFree(s);})||bfs(sx,sy,(x,y)=>{const s=seatAt.get(y*W+x);return !!s&&isSeatOpen(s);});
   if(!res){toast('지금은 빈자리가 없어요. 잠시 뒤에 다시 눌러주세요.');return;}
   const s=seatAt.get(res.end);
   pendingSeat=s;autoFast=true;setPath(res.tiles,s);marker=null;
@@ -798,7 +814,7 @@ function arrive(){
   path=null;
   if(pendingSeat){
     const s=pendingSeat;pendingSeat=null;
-    if(isSeatFree(s))sit(s);
+    if(isSeatOpen(s))sit(s);
     else{toast('그 사이에 다른 분이 앉았어요. 다음 빈자리를 찾을게요.');takeSeat();}
   }
   updateBottomUI();
@@ -845,13 +861,16 @@ function sit(s){
   $('goalInput').value=goal;
   updateBottomUI();renderTicket();requestWake();ensureAudio();knock();
 }
+let lastSit=(()=>{const v=store.get('lastSit',null);return v&&typeof v.seat==='string'&&num(v.start)!==null&&num(v.min)!==null&&v.day===kstDay(Date.now())?v:null;})();
 function stand(silent){
   if(!me.seat)return;
   if(!silent)knock(true);
   tickStudy(Date.now());saveToday();
   const s=me.seat,sec=sess?sess.sec:0;
+  if(sec>=60&&roomId)lastSit={seat:s.id,start:sess.start,min:Math.floor(sec/60),room:roomId,day:kstDay(Date.now())},store.set('lastSit',lastSit);
   me.seat=null;sess=null;me.x=s.cx;me.y=s.cy+4;me.dir='down';
   releaseWake();updateBottomUI();
+  sendVisit();lastPres='';sendPresence(true);
   if(!silent)toast(sec<60?'잠깐 앉았다 일어났어요.':`이번 순공 ${fmtDur(sec)}. 수고했어요.`);
 }
 const fmtClock=s=>{s=Math.floor(s);return [Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(pad2).join(':');};
@@ -1169,7 +1188,7 @@ function drawTags(){
     if(sx<-80||sx>vw+80||sy<-40||sy>vh+40)continue;
     const nm=p.isMe?nick:p.nick;
     let text=nm;
-    if(p.seat){const mins=p.isMe?Math.floor((sess?sess.sec:0)/60):(p.since?Math.max(0,Math.floor((now-p.since)/60000)):0);text=`${nm} · ${mins}분`;}
+    if(p.seat){const mins=p.isMe?Math.floor((sess?sess.sec:0)/60):p.fixedMin!=null?p.fixedMin:(p.since?Math.max(0,Math.floor((now-p.since)/60000)):0);text=`${nm} · ${mins}분`;}
     const top=tag(sx,sy,text,p.isMe?'me':'peer');
     const gl=p.isMe?goal:p.goal;
     if(p.seat&&gl)bubble(sx,top,gl.length>18?gl.slice(0,17)+'…':gl);
@@ -1194,7 +1213,7 @@ function frame(nowMs){
       me.dir=Math.abs(ix)>Math.abs(iy)?(ix>0?'right':'left'):iy?(iy>0?'down':'up'):me.dir;
       if(ix&&iy&&(me.dir==='up'||me.dir==='down'))me.dir=iy>0?'down':'up';
     }else if(path)followPath(dt);
-    if(pendingSeat&&!isSeatFree(pendingSeat)){toast('가던 자리에 다른 분이 앉았어요. 다음 빈자리를 찾을게요.');pendingSeat=null;path=null;takeSeat();}
+    if(pendingSeat&&!isSeatOpen(pendingSeat)){toast('가던 자리에 다른 분이 앉았어요. 다음 빈자리를 찾을게요.');pendingSeat=null;path=null;takeSeat();}
   }else if(lampLevel<1)lampLevel=Math.min(1,lampLevel+dt*1.6);
   for(const p of peers.values()){
     const k=Math.min(1,dt*10),dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy);
@@ -1262,7 +1281,7 @@ function handleTap(cx,cy){
   if(c==='L'||c==='D'){toast('사서: 자리잡기를 누르면 가장 가까운 빈자리로 안내해 드려요.');return;}
   const s=seatAt.get(ty*W+tx);
   if(me.seat){if(s!==me.seat)seatedHint();return;}
-  if(s){if(!isSeatFree(s)){toast('이미 누가 앉아 있는 자리예요.');return;}goToSeat(s);return;}
+  if(s){if(!isSeatOpen(s)){toast('이미 누가 앉아 있는 자리예요.');return;}goToSeat(s);return;}
   let target=[tx,ty];
   if(blocked(tx,ty)){
     let best=null,bd=1e9;
@@ -1345,13 +1364,14 @@ for(const k of KEYS){
 renderSound();
 
 function closePops(){
-  for(const [b,p] of [['peopleBtn','peoplePop'],['nickBtn','nickPop'],['roomBtn','roomPop'],['setBtn','setPop']]){$(p).hidden=true;$(b).setAttribute('aria-expanded','false');}
+  for(const [b,p] of [['peopleBtn','peoplePop'],['nickBtn','nickPop'],['roomBtn','roomPop'],['setBtn','setPop'],['statPill','todayPop']]){$(p).hidden=true;$(b).setAttribute('aria-expanded','false');}
 }
 function togglePop(btn,pop,onOpen){
   const open=$(pop).hidden;closePops();
   if(open){toastEl.classList.remove('show');$(pop).hidden=false;$(btn).setAttribute('aria-expanded','true');if(onOpen)onOpen();}
 }
 $('peopleBtn').addEventListener('click',()=>togglePop('peopleBtn','peoplePop',renderPeople));
+$('statPill').addEventListener('click',()=>togglePop('statPill','todayPop',renderToday));
 $('nickBtn').addEventListener('click',()=>togglePop('nickBtn','nickPop',()=>{$('nickShow').textContent=nick;pendingHue=hue;renderSwatches();}));
 let pendingHue=hue;
 function renderSwatches(){
@@ -1368,7 +1388,7 @@ function renderMe(){$('nickTxt').textContent=nick;$('nickSwatch').style.backgrou
 function renderPeople(){
   const now=Date.now();
   const rows=[{name:nick,hue,seat:me.seat,mins:sess?Math.floor(sess.sec/60):0,me:true}];
-  for(const p of peers.values())rows.push({name:p.nick,hue:p.hue,seat:p.seat,mins:p.since?Math.max(0,Math.floor((now-p.since)/60000)):0});
+  for(const p of peers.values())if(!p.ghost)rows.push({name:p.nick,hue:p.hue,seat:p.seat,mins:p.since?Math.max(0,Math.floor((now-p.since)/60000)):0});
   const live=roomState==='on'&&roomLive;
   $('peopleCount').textContent=roomState==='off'?'혼자 보기':live?rows.length+'명':'연결 중';
   $('peopleLbl').hidden=!live;$('liveDot').classList.toggle('off',!live);
@@ -1390,11 +1410,18 @@ setInterval(updateClock,15000);updateClock();
 
 /* ---------- live room (whoever has this page open now) ---------- */
 function syncPeers(list){
-  const seen=new Set();othersSeat.clear();
+  const seen=new Set();othersSeat.clear();ghostSeat.clear();
+  // live people first, so a person who left never blocks someone who is really sitting there
+  list=list.slice().sort((a,b)=>(a.gone?1:0)-(b.gone?1:0));
   for(const p of list){
     if(p.sameTab){myPeer=p.peer;continue;}
     if(p.kind!=='viewer')continue;
     const pr=p.presence||{};
+    let ghostAt=null;
+    if(p.gone){
+      ghostAt=typeof pr.ls==='string'?seatById.get(pr.ls):null;
+      if(!ghostAt||NPC_SEATS.has(ghostAt.id)||othersSeat.has(ghostAt.id)||ghostSeat.has(ghostAt.id)||(me.seat&&me.seat.id===ghostAt.id)||(pendingSeat&&pendingSeat.id===ghostAt.id))continue;
+    }
     let r=peers.get(p.peer);
     const x=num(pr.x),y=num(pr.y);
     const hasPos=x!==null&&y!==null&&x>=0&&y>=0&&x<=W*TS&&y<=H*TS;
@@ -1411,7 +1438,12 @@ function syncPeers(list){
     r.remoteMoving=pr.m===1;
     const s=typeof pr.s==='string'?seatById.get(pr.s):null;
     r.seat=s&&!NPC_SEATS.has(s.id)?s:null;
-    if(r.seat&&!othersSeat.has(r.seat.id))othersSeat.set(r.seat.id,r);
+    r.ghost=!!ghostAt;r.fixedMin=null;
+    if(ghostAt){
+      r.seat=ghostAt;r.since=num(pr.lt)||0;r.fixedMin=num(pr.lm);r.goal=typeof pr.lg==='string'?cleanText(pr.lg,24):'';
+      r.x=r.tx=ghostAt.cx;r.y=r.ty=ghostAt.cy+4;r.hasPos=true;r.dir=ghostAt.dir;r.remoteMoving=false;
+      ghostSeat.set(ghostAt.id,r);
+    }else if(r.seat&&!othersSeat.has(r.seat.id))othersSeat.set(r.seat.id,r);
   }
   for(const k of [...peers.keys()])if(!seen.has(k))peers.delete(k);
   // two people on one seat: whoever sat first keeps it
@@ -1430,9 +1462,13 @@ function syncPeers(list){
 const BROKERS=window.KKUM_BROKERS||['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081'];
 const ROOT='kkumiroom-7f3a/v2/';
 const SEATED_TTL=12*3600e3,STAND_TTL=12000;
-const kstDay=ts=>{const d=new Date(ts+9*3600e3);return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate();};
 const seatAlive=(at,now)=>now-at<SEATED_TTL&&kstDay(at)===kstDay(now);
-const stateAlive=(m,at,now)=>isSeated(m)?seatAlive(at,now):now-at<STAND_TTL;
+// live: seated, or walking around within the last 12s
+const liveAlive=(m,at,now)=>isSeated(m)?seatAlive(at,now):now-at<STAND_TTL;
+// someone who studied today and then stood up and left keeps showing at their last seat until the day ends
+const hasLastSeat=m=>!!m&&typeof m.ls==='string'&&m.ls!=='';
+const isGone=(m,at,now)=>!isSeated(m)&&now-at>=STAND_TTL&&hasLastSeat(m)&&seatAlive(at,now);
+const stateAlive=(m,at,now)=>liveAlive(m,at,now)||isGone(m,at,now);
 const HALL_CAP=60;
 const ROOM_WORDS=['maru','byeol','haneul','dal','nuri','sori','bom','gaeul','bada','sol','dari','gil','saebyeok','kkum'];
 const cleanRoom=r=>String(r||'').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
@@ -1453,7 +1489,14 @@ const RESUME=(()=>{
 })();
 let resume=RESUME,staleGhost=null;
 const savedUid=tabStore.get('kkum.uid');
-const uid=(resume&&resume.uid)||(ID_RE.test(savedUid||'')?savedUid:randomId());
+const devUid=(()=>{const v=devStore.get('kkum.dayUid');if(!v||!ID_RE.test(v.id||'')||v.day!==kstDay(Date.now()))return null;
+  // another open tab is using it right now: that tab keeps it
+  let beat=0;try{beat=+localStorage.getItem('kkum.beat.'+v.id)||0;}catch(e){}
+  return Date.now()-beat>7000?v.id:null;})();
+const uid=(resume&&resume.uid)||(ID_RE.test(savedUid||'')?savedUid:null)||devUid||randomId();
+devStore.set('kkum.dayUid',{id:uid,day:kstDay(Date.now())});
+const beat=()=>{try{localStorage.setItem('kkum.beat.'+uid,String(Date.now()));}catch(e){}};beat();setInterval(beat,3000);
+addEventListener('pagehide',()=>{try{localStorage.removeItem('kkum.beat.'+uid);}catch(e){}});
 tabStore.set('kkum.uid',uid);
 if(resume&&urlRoom&&resume.room&&urlRoom!==resume.room){staleGhost={room:resume.room,id:resume.uid};resume=null;}
 const tabTag=randomId().slice(1,7);
@@ -1463,6 +1506,7 @@ let lastPres='',lastWrite=0,lastSend=0;
 function sendPresence(force,away){
   if(!client||!roomLive||!myTopic)return;
   const pres={id:uid,x:Math.round(me.x),y:Math.round(me.y),d:me.dir,s:me.seat?me.seat.id:null,n:nick,h:hue,a:hairIdx,k:skinIdx,g:me.seat?goal:'',t:me.seat&&sess?sess.start:0,m:me.moving?1:0,bg:away||document.hidden?1:0};
+  if(!me.seat&&lastSit&&lastSit.room===roomId&&lastSit.day===kstDay(Date.now())){pres.ls=lastSit.seat;pres.lt=lastSit.start;pres.lm=lastSit.min;pres.lg=goal;}
   const key=JSON.stringify(pres),now=Date.now();
   if(force!==true&&(key===lastPres?now-lastWrite<4000:now-lastSend<250))return;
   lastPres=key;lastWrite=lastSend=now;pres.ts=now;
@@ -1501,26 +1545,60 @@ function hallCount(n){
   if('hall-'+n===roomId)return peers.size+1;
   const map=hallSeen[n];if(!map)return null;
   const now=Date.now();let c=0;
-  for(const v of map.values())if(stateAlive(v.m,v.at,now))c++;
+  for(const v of map.values())if(liveAlive(v.m,v.at,now))c++;
   return c;
 }
 // today's visitors: everyone leaves a tiny retained mark under visits/<KST day>/<id>
-const visitors=new Set();
+const visitors=new Map();let visitTopic='';
+function visitPayload(){
+  if(today.d!==dayKey())today={d:dayKey(),sec:0};
+  return JSON.stringify({n:nick,h:hue,sec:Math.round(today.sec),r:roomId||'',ts:Date.now()});
+}
+function sendVisit(){try{if(client&&roomLive&&visitTopic)client.publish(visitTopic+uid,visitPayload(),{qos:0,retain:true});}catch(e){}}
 function onVisit(topic,payload){
   const pre=ROOT+'visits/'+kstDay(Date.now())+'/';if(!topic.startsWith(pre))return;
   const id=topic.slice(pre.length);if(!ID_RE.test(id))return;
-  if(payload.length)visitors.add(id);else visitors.delete(id);
-  renderStats();
+  if(!payload.length){visitors.delete(id);renderStats();return;}
+  let v={};try{const m=JSON.parse(td.decode(payload));if(m&&typeof m==='object')v=m;}catch(e){}
+  visitors.set(id,{n:typeof v.n==='string'?cleanText(v.n,12):'',h:num(v.h),sec:Math.max(0,num(v.sec)||0)});
+  renderStats();if(!$('todayPop').hidden)renderToday();
+}
+function liveIds(){
+  const now=Date.now(),ids=new Set([uid]);
+  for(const [id,p] of peers)if(!p.ghost)ids.add(id);
+  for(let n=1;n<=ROOMS;n++){const map=hallSeen[n];if(map)for(const [id,v] of map)if(liveAlive(v.m,v.at,now))ids.add(id);}
+  return ids;
+}
+function renderToday(){
+  const list=$('todayList');list.replaceChildren();
+  const live=liveIds(),rows=[];
+  for(const [id,v] of visitors){
+    if(id===uid)continue;
+    if(!v.n)continue;
+    rows.push({name:v.n,hue:v.h,sec:v.sec,live:live.has(id)});
+  }
+  rows.push({name:nick,hue,sec:today.sec,live:true,me:true});
+  rows.sort((a,b)=>b.sec-a.sec);
+  for(const r of rows.slice(0,80)){
+    const li=document.createElement('li');
+    const sw=document.createElement('span');sw.className='swatch';sw.style.background=shirtOf(r.hue!=null?r.hue:200);
+    const nm=document.createElement('span');nm.className='nm';nm.textContent=r.name;
+    if(r.me){const em=document.createElement('em');em.textContent='나';nm.append(em);}
+    else if(r.live){const d=document.createElement('span');d.className='dot';d.title='지금 공부 중';nm.append(d);}
+    const st=document.createElement('span');st.className='st'+(r.live?' on':'');st.textContent=r.sec>=60?fmtDur(r.sec):'방금 들어옴';
+    li.append(sw,nm,st);list.append(li);
+  }
+  $('todayNote').textContent=`오늘 ${Math.max(visitors.size,rows.length)}명이 다녀갔어요. 초록 점은 지금 공부 중인 사람이에요. 밤 12시에 새로 시작해요.`;
 }
 function studyingNow(){
   const now=Date.now();let c=me.seat?1:0;
-  for(const p of peers.values())if(p.seat)c++;
-  for(let n=1;n<=ROOMS;n++){if('hall-'+n===roomId)continue;const map=hallSeen[n];if(map)for(const v of map.values())if(isSeated(v.m)&&stateAlive(v.m,v.at,now))c++;}
+  for(const p of peers.values())if(p.seat&&!p.ghost)c++;
+  for(let n=1;n<=ROOMS;n++){if('hall-'+n===roomId)continue;const map=hallSeen[n];if(map)for(const v of map.values())if(isSeated(v.m)&&liveAlive(v.m,v.at,now))c++;}
   return c;
 }
 function renderStats(){
   const on=roomState==='on'&&!!roomId;$('statPill').hidden=!on;if(!on)return;
-  visitors.add(uid);
+  if(!visitors.has(uid))visitors.set(uid,{n:nick,h:hue,sec:today.sec});
   $('statNow').textContent=studyingNow();$('statToday').textContent=visitors.size;
 }
 setInterval(renderStats,2000);
@@ -1559,7 +1637,8 @@ function prune(){
 }
 function flush(){
   timer=0;prune();
-  const list=Object.keys(players).map(k=>({peer:k,sameTab:false,kind:'viewer',presence:players[k].p}));
+  const now=Date.now();
+  const list=Object.keys(players).map(k=>({peer:k,sameTab:false,kind:'viewer',presence:players[k].p,gone:isGone(players[k].p,players[k].seen,now)}));
   list.push({peer:uid,sameTab:true,kind:'viewer',presence:{}});
   syncPeers(list);
 }
@@ -1600,7 +1679,7 @@ async function countHall(n){
   const prefix=ROOT+'hall-'+n+'/s/',ids=new Set(),now=Date.now();
   const h=(topic,payload)=>{
     if(!topic.startsWith(prefix)||!payload.length)return;
-    try{const m=JSON.parse(td.decode(payload)),age=now-(num(m.ts)||0);if(stateAlive(m,now-age,now))ids.add(topic.slice(prefix.length));}catch(e){}
+    try{const m=JSON.parse(td.decode(payload)),age=now-(num(m.ts)||0);if(liveAlive(m,now-age,now))ids.add(topic.slice(prefix.length));}catch(e){}
   };
   client.on('message',h);
   await new Promise(r=>client.subscribe(prefix+'+',{qos:0},()=>r()));
@@ -1625,13 +1704,13 @@ async function connectRoom(){
         try{history.replaceState(null,'',roomUrl(roomId));}catch(e){}
         renderRoom();roomState='on';
         client.on('message',onMessage);client.on('message',onHallMessage);client.on('message',onVisit);
-        const visitTopic=ROOT+'visits/'+kstDay(Date.now())+'/';
-        const join=()=>{client.subscribe([subTopic,ROOT+'lost',visitTopic+'+'],{qos:0},()=>{roomLive=true;lastPres='';sendPresence(true);client.publish(visitTopic+uid,'1',{qos:0,retain:true});renderPeople();renderStats();});};
+        visitTopic=ROOT+'visits/'+kstDay(Date.now())+'/';
+        const join=()=>{client.subscribe([subTopic,ROOT+'lost',visitTopic+'+'],{qos:0},()=>{roomLive=true;lastPres='';sendPresence(true);sendVisit();renderPeople();renderStats();});};
         watchOn=false;watchHalls(true);
         client.on('connect',join);join();
         client.on('offline',()=>{roomLive=false;renderPeople();});
         client.on('close',()=>{if(roomLive){roomLive=false;renderPeople();}});
-        setInterval(sendPresence,150);setInterval(schedule,2000);
+        setInterval(sendPresence,150);setInterval(schedule,2000);setInterval(()=>{if(me.seat)sendVisit();},60000);
         saveResume();
         if(!resume)toast(`${roomLabel(roomId)}에 들어왔어요. 이 방 링크를 보내면 친구가 같은 방으로 와요.`,5000);
         renderPeople();return;
@@ -1649,7 +1728,7 @@ document.addEventListener('visibilitychange',()=>{
   lastPres='';sendPresence(true);
 });
 addEventListener('pageshow',e=>{closing=false;if(e.persisted&&client){lastPres='';sendPresence(true);}});
-const leaving=()=>{closing=true;saveResume(true);try{if(client&&myTopic){if(me.seat)sendPresence(true,1);else client.publish(myTopic,'',{qos:0,retain:true});}}catch(e){}};
+const leaving=()=>{closing=true;saveResume(true);try{if(me.seat){tickStudy(Date.now());saveToday();}sendVisit();if(client&&myTopic){if(me.seat||(lastSit&&lastSit.room===roomId&&lastSit.day===kstDay(Date.now()))){lastPres='';sendPresence(true,1);}else client.publish(myTopic,'',{qos:0,retain:true});}}catch(e){}};
 addEventListener('pagehide',leaving);addEventListener('beforeunload',leaving);
 setInterval(()=>saveResume(),3000);
 $('roomBtn').addEventListener('click',()=>togglePop('roomBtn','roomPop',()=>{watchHalls(true);renderRoomGrid();}));
@@ -1671,7 +1750,7 @@ function start(data){
   try{
     if(data&&typeof data.seat==='string'){
       const st=seatById.get(data.seat);
-      if(st&&isSeatFree(st)){
+      if(st&&isSeatOpen(st)){
         sit(st);
         sess.start=data.start;sess.sec=data.sec;sess.last=data.closed?Date.now():data.last;
         if(mode==='pomo'&&data.mode==='pomo'&&num(data.phaseEnd)!==null){phase=data.phase==='break'?'break':'focus';phaseEnd=data.phaseEnd;pomoCount=data.pomoCount|0;}
