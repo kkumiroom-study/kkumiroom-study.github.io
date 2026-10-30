@@ -203,6 +203,7 @@ button,input{font:inherit;color:inherit}
 .install{position:fixed;left:16px;right:16px;margin:0 auto;max-width:440px;bottom:calc(112px + env(safe-area-inset-bottom,0px));z-index:9;
   display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.45);box-sizing:border-box}
 .install[hidden]{display:none}
+.is-seated .install{display:none}
 .install img{border-radius:11px;flex:none}
 .i-txt{display:grid;gap:2px;min-width:0;flex:1}
 .i-txt b{font-size:14px}
@@ -339,6 +340,10 @@ const TS=32, W=34, H=22, TAU=Math.PI*2;
 const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const num=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
+const isSeated=p=>!!p&&typeof p.s==='string'&&p.s!=='';
+let roomState='connecting',roomLive=false;
+const toastEl=$('toast');let toastTimer=0;
 
 /* ---------- storage (per-viewer conveniences only) ---------- */
 const store={
@@ -1304,7 +1309,6 @@ $('tFold').addEventListener('click',()=>setFold(!$('ticket').classList.contains(
 setFold(store.get('ticketMini',false)===true);
 
 /* ---------- UI ---------- */
-const toastEl=$('toast');let toastTimer=0;
 function toast(msg,ms){toastEl.className='toast glass show';toastEl.textContent=msg;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),ms||3400);}
 function slip(s,steps){
   toastEl.className='toast slip show';toastEl.replaceChildren();
@@ -1318,6 +1322,7 @@ toastTimer=setTimeout(()=>toastEl.classList.remove('show'),7000);
 function updateBottomUI(){
   const seated=!!me.seat,going=!!pendingSeat&&!seated;
   $('ticket').hidden=!seated;$('seatBtn').hidden=seated||going;$('goingBar').hidden=!going;$('hint').hidden=seated||going;
+  document.body.classList.toggle('is-seated',seated);
   if(going)$('goingTxt').textContent=`${pendingSeat.name} · 이동 중`;
 }
 $('seatBtn').addEventListener('click',()=>{ensureAudio();takeSeat();});
@@ -1384,7 +1389,6 @@ function updateClock(){$('clockTxt').textContent=new Date().toLocaleTimeString('
 setInterval(updateClock,15000);updateClock();
 
 /* ---------- live room (whoever has this page open now) ---------- */
-const num=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
 function syncPeers(list){
   const seen=new Set();othersSeat.clear();
   for(const p of list){
@@ -1455,7 +1459,6 @@ if(resume&&urlRoom&&resume.room&&urlRoom!==resume.room){staleGhost={room:resume.
 const tabTag=randomId().slice(1,7);
 
 let client=null,roomId='',myTopic='',subTopic='';
-let roomState='connecting',roomLive=false;
 let lastPres='',lastWrite=0,lastSend=0;
 function sendPresence(force,away){
   if(!client||!roomLive||!myTopic)return;
@@ -1466,7 +1469,9 @@ function sendPresence(force,away){
   client.publish(myTopic,JSON.stringify(pres),{qos:0,retain:true});
 }
 const clearState=(room,id)=>{if(client&&room)client.publish(ROOT+room+'/s/'+id,'',{qos:0,retain:true});};
+let closing=false;
 function saveResume(closed){
+  closed=closed||closing;
   if(me.seat&&sess){
     const r={uid,room:roomId||(resume&&resume.room)||'',seat:me.seat.id,start:sess.start,sec:sess.sec,last:sess.last,mode,phase,phaseEnd,pomoCount,savedAt:Date.now()};
     tabStore.set('kkum.resume',r);if(closed)r.closed=true;devStore.set('kkum.last',r);
@@ -1544,7 +1549,6 @@ function goRoom(id){
 setInterval(()=>{if(!$('roomPop').hidden)renderRoomGrid();},2000);
 const players={};let timer=0;
 const td=new TextDecoder();
-const isSeated=p=>typeof p.s==='string'&&p.s!=='';
 function prune(){
   const now=Date.now();
   for(const id of Object.keys(players)){
@@ -1638,13 +1642,14 @@ async function connectRoom(){
 }
 // screen off or another app: stay seated and say so; closing the page: leave
 document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden)closing=false;
   saveResume();
   if(!client)return;
   if(!document.hidden&&!client.connected){try{client.reconnect();}catch(e){}}
   lastPres='';sendPresence(true);
 });
-addEventListener('pageshow',e=>{if(e.persisted&&client){lastPres='';sendPresence(true);}});
-const leaving=()=>{saveResume(true);try{if(client&&myTopic){if(me.seat)sendPresence(true,1);else client.publish(myTopic,'',{qos:0,retain:true});}}catch(e){}};
+addEventListener('pageshow',e=>{closing=false;if(e.persisted&&client){lastPres='';sendPresence(true);}});
+const leaving=()=>{closing=true;saveResume(true);try{if(client&&myTopic){if(me.seat)sendPresence(true,1);else client.publish(myTopic,'',{qos:0,retain:true});}}catch(e){}};
 addEventListener('pagehide',leaving);addEventListener('beforeunload',leaving);
 setInterval(()=>saveResume(),3000);
 $('roomBtn').addEventListener('click',()=>togglePop('roomBtn','roomPop',()=>{watchHalls(true);renderRoomGrid();}));
