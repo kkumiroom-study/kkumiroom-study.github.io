@@ -122,6 +122,10 @@ button,input{font:inherit;color:inherit}
 .room-share .snd-group{margin:0 2px}
 .snd-hint{position:fixed;z-index:7;left:50%;transform:translateX(-50%);top:calc(176px + env(safe-area-inset-top,0px));display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:10px 18px;background:var(--lamp);color:var(--lamp-ink);font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 8px 26px rgba(0,0,0,.35)}
 .snd-hint svg{width:18px;height:18px}
+.stat-row{display:flex;justify-content:center;pointer-events:none}
+.stat{margin:0;display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;font-size:13.5px;color:var(--paper);pointer-events:auto;white-space:nowrap}
+.stat b{font-family:var(--f-mono);font-size:16px;color:var(--lamp);font-variant-numeric:tabular-nums}
+.stat i{width:1px;height:14px;background:var(--line);margin:0 4px}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;background:var(--paper);color:var(--night)}
 
 .bottom{display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -210,6 +214,7 @@ button,input{font:inherit;color:inherit}
         <button id="nickBtn" class="chip glass" aria-expanded="false" aria-controls="nickPop"><span class="swatch" id="nickSwatch" aria-hidden="true"></span><span id="nickTxt">이름</span></button>
       </div>
     </div>
+    <div class="stat-row"><p id="statPill" class="stat glass" hidden><span class="live" aria-hidden="true"></span>지금 <b id="statNow">0</b>명 공부 중<i aria-hidden="true"></i>오늘 <b id="statToday">0</b>명 입장</p></div>
     <div id="peoplePop" class="pop glass" hidden>
       <h3>지금 열람실에 있는 사람</h3>
       <ul id="peopleList" class="people"></ul>
@@ -368,7 +373,17 @@ const NPCS=[
   {seatId:'A-2',hair:1,skin:0,hue:205,item:'book',phaseOff:1.3,studying:true},
   {seatId:'D-7',hair:4,skin:2,hue:340,item:'laptop',phaseOff:2.1,studying:true},
   {seatId:'P05',hair:2,skin:1,hue:150,item:'book',phaseOff:0.4,studying:true},
-  {seatId:'P18',hair:6,skin:3,hue:40,item:'book',phaseOff:3.2,studying:true}
+  {seatId:'P18',hair:6,skin:3,hue:40,item:'book',phaseOff:3.2,studying:true},
+  {seatId:'B-3',hair:3,skin:0,hue:262,item:'book',phaseOff:.8,studying:true},
+  {seatId:'B-8',hair:0,skin:3,hue:175,item:'laptop',phaseOff:2.7,studying:true},
+  {seatId:'C-1',hair:5,skin:1,hue:28,item:'book',phaseOff:1.9,studying:true},
+  {seatId:'C-6',hair:7,skin:2,hue:228,item:'book',phaseOff:.2,studying:true},
+  {seatId:'D-2',hair:1,skin:3,hue:345,item:'book',phaseOff:3.6,studying:true},
+  {seatId:'E-3',hair:2,skin:0,hue:145,item:'laptop',phaseOff:1.1,studying:true},
+  {seatId:'P02',hair:4,skin:1,hue:4,item:'book',phaseOff:2.4,studying:true},
+  {seatId:'P10',hair:6,skin:2,hue:318,item:'book',phaseOff:.6,studying:true},
+  {seatId:'P23',hair:0,skin:1,hue:200,item:'book',phaseOff:3.0,studying:true},
+  {seatId:'P29',hair:3,skin:3,hue:48,item:'laptop',phaseOff:1.5,studying:true}
 ].map(n=>({...n,seat:seatById.get(n.seatId),npc:true}));
 const NPC_SEATS=new Set(NPCS.map(n=>n.seatId));
 const LIBRARIAN={seat:{cx:11*TS+16,cy:18*TS+16,dir:'right',ix:12*TS+10,iy:18*TS+12},hair:2,skin:1,hue:165,bun:true,glasses:true,studying:true,phaseOff:2.6,npc:true};
@@ -1233,7 +1248,6 @@ renderSound();
 
 function closePops(){
   for(const [b,p] of [['peopleBtn','peoplePop'],['nickBtn','nickPop'],['roomBtn','roomPop'],['setBtn','setPop']]){$(p).hidden=true;$(b).setAttribute('aria-expanded','false');}
-  if(typeof watchHalls==='function')watchHalls(false);
 }
 function togglePop(btn,pop,onOpen){
   const open=$(pop).hidden;closePops();
@@ -1316,12 +1330,14 @@ function syncPeers(list){
 }
 // live room over a public MQTT relay: no account needed.
 // Each person keeps a retained state message on <room>/s/<id>, so newcomers see everyone, including people
-// who are studying with the screen off. Seated people stay until they stand up or close the page
-// (3h safety limit for apps killed without a goodbye). A page that was on screen and goes silent was closed,
-// so it is forgotten within seconds; people walking around disappear after 12s of silence.
+// who are studying with the screen off or the page closed. Seated people keep their seat until they stand up
+// or the day ends (KST midnight, 12h at most); people walking around disappear after 12s of silence.
 const BROKERS=window.KKUM_BROKERS||['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081'];
 const ROOT='kkumiroom-7f3a/v2/';
-const SEATED_TTL=3*3600e3,STAND_TTL=12000,LOST_GRACE=6000,SEATED_VISIBLE_SILENCE=20000,RETAINED_SEATED_VISIBLE=30000;
+const SEATED_TTL=12*3600e3,STAND_TTL=12000;
+const kstDay=ts=>{const d=new Date(ts+9*3600e3);return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate();};
+const seatAlive=(at,now)=>now-at<SEATED_TTL&&kstDay(at)===kstDay(now);
+const stateAlive=(m,at,now)=>isSeated(m)?seatAlive(at,now):now-at<STAND_TTL;
 const HALL_CAP=60;
 const ROOM_WORDS=['maru','byeol','haneul','dal','nuri','sori','bom','gaeul','bada','sol','dari','gil','saebyeok','kkum'];
 const cleanRoom=r=>String(r||'').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
@@ -1337,7 +1353,7 @@ const urlRoom=cleanRoom(new URLSearchParams(location.search).get('room'));
 const RESUME=(()=>{
   const now=Date.now(),ok=r=>!!r&&typeof r==='object'&&ID_RE.test(r.uid||'')&&typeof r.seat==='string'&&typeof r.room==='string'&&num(r.start)!==null&&num(r.sec)!==null&&num(r.last)!==null&&num(r.savedAt)!==null&&now-r.savedAt<SEATED_TTL;
   const t=tabStore.get('kkum.resume');if(ok(t))return t;
-  const l=devStore.get('kkum.last');if(ok(l)&&!l.closed&&now-l.savedAt>20000)return l;
+  const l=devStore.get('kkum.last');if(ok(l)&&kstDay(l.savedAt)===kstDay(now)&&(l.closed||now-l.savedAt>10000))return l;
   return null;
 })();
 let resume=RESUME,staleGhost=null;
@@ -1350,9 +1366,9 @@ const tabTag=randomId().slice(1,7);
 let client=null,roomId='',myTopic='',subTopic='';
 let roomState='connecting',roomLive=false;
 let lastPres='',lastWrite=0,lastSend=0;
-function sendPresence(force){
+function sendPresence(force,away){
   if(!client||!roomLive||!myTopic)return;
-  const pres={id:uid,x:Math.round(me.x),y:Math.round(me.y),d:me.dir,s:me.seat?me.seat.id:null,n:nick,h:hue,a:hairIdx,k:skinIdx,g:me.seat?goal:'',t:me.seat&&sess?sess.start:0,m:me.moving?1:0,bg:document.hidden?1:0};
+  const pres={id:uid,x:Math.round(me.x),y:Math.round(me.y),d:me.dir,s:me.seat?me.seat.id:null,n:nick,h:hue,a:hairIdx,k:skinIdx,g:me.seat?goal:'',t:me.seat&&sess?sess.start:0,m:me.moving?1:0,bg:away||document.hidden?1:0};
   const key=JSON.stringify(pres),now=Date.now();
   if(force!==true&&(key===lastPres?now-lastWrite<4000:now-lastSend<250))return;
   lastPres=key;lastWrite=lastSend=now;pres.ts=now;
@@ -1383,15 +1399,35 @@ function onHallMessage(topic,payload,packet){
   const map=hallSeen[+m0[1]];if(!map)return;const id=m0[2];
   if(!payload.length)map.delete(id);
   else{try{const m=JSON.parse(td.decode(payload));if(m&&m.id===id)map.set(id,{m,at:packet&&packet.retain?(num(m.ts)||0):Date.now()});}catch(e){}}
-  renderRoomGrid();
+  renderRoomGrid();renderStats();
 }
 function hallCount(n){
   if('hall-'+n===roomId)return peers.size+1;
   const map=hallSeen[n];if(!map)return null;
   const now=Date.now();let c=0;
-  for(const v of map.values()){const age=now-v.at;if(isSeated(v.m)?(v.m.bg===1?age<SEATED_TTL:age<RETAINED_SEATED_VISIBLE):age<STAND_TTL)c++;}
+  for(const v of map.values())if(stateAlive(v.m,v.at,now))c++;
   return c;
 }
+// today's visitors: everyone leaves a tiny retained mark under visits/<KST day>/<id>
+const visitors=new Set();
+function onVisit(topic,payload){
+  const pre=ROOT+'visits/'+kstDay(Date.now())+'/';if(!topic.startsWith(pre))return;
+  const id=topic.slice(pre.length);if(!ID_RE.test(id))return;
+  if(payload.length)visitors.add(id);else visitors.delete(id);
+  renderStats();
+}
+function studyingNow(){
+  const now=Date.now();let c=me.seat?1:0;
+  for(const p of peers.values())if(p.seat)c++;
+  for(let n=1;n<=ROOMS;n++){if('hall-'+n===roomId)continue;const map=hallSeen[n];if(map)for(const v of map.values())if(isSeated(v.m)&&stateAlive(v.m,v.at,now))c++;}
+  return c;
+}
+function renderStats(){
+  const on=roomState==='on'&&!!roomId;$('statPill').hidden=!on;if(!on)return;
+  visitors.add(uid);
+  $('statNow').textContent=studyingNow();$('statToday').textContent=visitors.size;
+}
+setInterval(renderStats,2000);
 function renderRoomGrid(){
   const g=$('roomGrid');g.replaceChildren();
   for(let n=1;n<=ROOMS;n++){
@@ -1422,8 +1458,7 @@ function prune(){
   const now=Date.now();
   for(const id of Object.keys(players)){
     const P=players[id],p=P.p;let drop;
-    if(isSeated(p))drop=now-P.seen>SEATED_TTL||(p.bg!==1&&(now-P.seen>SEATED_VISIBLE_SILENCE||(P.lostAt&&P.seen<P.lostAt&&now-P.lostAt>LOST_GRACE)));
-    else drop=now-P.seen>STAND_TTL;
+    drop=!stateAlive(p,P.seen,now);
     if(drop){delete players[id];clearState(roomId,id);}
   }
 }
@@ -1450,7 +1485,7 @@ function onMessage(topic,payload,packet){
   const now=Date.now();
   if(packet&&packet.retain){
     const ts=num(m.ts)||0,age=now-ts;
-    const keep=isSeated(m)?(m.bg===1?age<SEATED_TTL:age<RETAINED_SEATED_VISIBLE):age<STAND_TTL;
+    const keep=stateAlive(m,ts,now);
     if(!keep){clearState(roomId,id);return;}
     players[id]={p:m,seen:Math.min(now,ts)};
   }else players[id]={p:m,seen:now};
@@ -1470,7 +1505,7 @@ async function countHall(n){
   const prefix=ROOT+'hall-'+n+'/s/',ids=new Set(),now=Date.now();
   const h=(topic,payload)=>{
     if(!topic.startsWith(prefix)||!payload.length)return;
-    try{const m=JSON.parse(td.decode(payload)),age=now-(num(m.ts)||0);if(isSeated(m)?(m.bg===1?age<SEATED_TTL:age<RETAINED_SEATED_VISIBLE):age<STAND_TTL)ids.add(topic.slice(prefix.length));}catch(e){}
+    try{const m=JSON.parse(td.decode(payload)),age=now-(num(m.ts)||0);if(stateAlive(m,now-age,now))ids.add(topic.slice(prefix.length));}catch(e){}
   };
   client.on('message',h);
   await new Promise(r=>client.subscribe(prefix+'+',{qos:0},()=>r()));
@@ -1490,8 +1525,10 @@ async function connectRoom(){
         if(staleGhost)clearState(staleGhost.room,staleGhost.id);
         try{history.replaceState(null,'',roomUrl(roomId));}catch(e){}
         renderRoom();roomState='on';
-        client.on('message',onMessage);client.on('message',onHallMessage);
-        const join=()=>{client.subscribe([subTopic,ROOT+'lost'],{qos:0},()=>{roomLive=true;lastPres='';sendPresence(true);renderPeople();});};
+        client.on('message',onMessage);client.on('message',onHallMessage);client.on('message',onVisit);
+        const visitTopic=ROOT+'visits/'+kstDay(Date.now())+'/';
+        const join=()=>{client.subscribe([subTopic,ROOT+'lost',visitTopic+'+'],{qos:0},()=>{roomLive=true;lastPres='';sendPresence(true);client.publish(visitTopic+uid,'1',{qos:0,retain:true});renderPeople();renderStats();});};
+        watchOn=false;watchHalls(true);
         client.on('connect',join);join();
         client.on('offline',()=>{roomLive=false;renderPeople();});
         client.on('close',()=>{if(roomLive){roomLive=false;renderPeople();}});
@@ -1512,7 +1549,8 @@ document.addEventListener('visibilitychange',()=>{
   lastPres='';sendPresence(true);
 });
 addEventListener('pageshow',e=>{if(e.persisted&&client){lastPres='';sendPresence(true);}});
-addEventListener('pagehide',()=>{saveResume(true);try{if(client&&myTopic)client.publish(myTopic,'',{qos:0,retain:true});}catch(e){}});
+const leaving=()=>{saveResume(true);try{if(client&&myTopic){if(me.seat)sendPresence(true,1);else client.publish(myTopic,'',{qos:0,retain:true});}}catch(e){}};
+addEventListener('pagehide',leaving);addEventListener('beforeunload',leaving);
 setInterval(()=>saveResume(),3000);
 $('roomBtn').addEventListener('click',()=>togglePop('roomBtn','roomPop',()=>{watchHalls(true);renderRoomGrid();}));
 $('roomClose').addEventListener('click',closePops);
@@ -1535,7 +1573,7 @@ function start(data){
       const st=seatById.get(data.seat);
       if(st&&isSeatFree(st)){
         sit(st);
-        sess.start=data.start;sess.sec=data.sec;sess.last=data.last;
+        sess.start=data.start;sess.sec=data.sec;sess.last=data.closed?Date.now():data.last;
         if(mode==='pomo'&&data.mode==='pomo'&&num(data.phaseEnd)!==null){phase=data.phase==='break'?'break':'focus';phaseEnd=data.phaseEnd;pomoCount=data.pomoCount|0;}
         tickStudy(Date.now());lampLevel=1;renderTicket();
         $('tIn').textContent='입실 '+new Date(data.start).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false});
