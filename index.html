@@ -240,7 +240,7 @@ button,input{font:inherit;color:inherit}
     <div id="setPop" class="pop glass right sheet" hidden role="dialog" aria-labelledby="setTitle">
       <div class="sheet-head"><h2 id="setTitle">설정</h2><button id="setClose" class="x" aria-label="설정 닫기">×</button></div>
       <div class="row-toggle">
-        <div><b>내가 듣는 소리</b><p>환경음 네 가지와 음악, 효과음을 내 취향대로 섞어요. 선택한 소리는 나에게만 들려요.</p></div>
+        <div><b>내가 듣는 소리</b><p>환경음 다섯 가지와 음악, 효과음을 내 취향대로 섞어요. 선택한 소리는 나에게만 들려요.</p></div>
         <button id="sndMaster" class="switch" role="switch" aria-checked="true" aria-label="내가 듣는 소리"><i></i></button>
       </div>
       <div id="sndCards" class="snd-list"></div>
@@ -836,7 +836,7 @@ async function requestWake(){try{if(navigator.wakeLock)wake=await navigator.wake
 function releaseWake(){try{if(wake)wake.release();}catch(e){}wake=null;}
 
 /* ---------- sound ---------- */
-// every sound is made in the browser: four ambiences that can be mixed (rain, library, cafe, white noise),
+// every sound is made in the browser: five ambiences that can be mixed (rain, library, cafe, campfire, white noise),
 // a soft piano-like pad and small effects. Rain is on by default and starts with the first tap,
 // because browsers only allow sound after the viewer touches the page.
 const SOUNDS=[
@@ -846,6 +846,8 @@ const SOUNDS=[
    icon:'<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/>'},
   {k:'cafe',title:'카페 소리',sub:'낮은 말소리와 잔 부딪히는 소리',on:false,vol:30,gain:1.3,
    icon:'<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.6 1 .6 1.5 0 2.5M12 3.5c-.6 1 .6 1.5 0 2.5"/>'},
+  {k:'fire',title:'모닥불',sub:'타닥타닥 장작 타는 소리',on:false,vol:35,gain:1.6,
+   icon:'<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2.2-4.8.2 1.6.9 2.6 1.8 3.1C11 9 11.2 6 12 3z"/><path d="M5 21h14"/>'},
   {k:'white',title:'백색소음',sub:'일정하게 흐르는 쉬 소리',on:false,vol:25,gain:.9,
    icon:'<path d="M3 12c1.5-3 3-3 4.5 0s3 3 4.5 0 3-3 4.5 0 3 3 4.5 0"/><path d="M3 17c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0" opacity=".5"/>'},
   {k:'music',group:'음악과 효과음',title:'집중 음악',sub:'잔잔한 피아노 화음, 듣고 싶을 때만',on:false,vol:26,gain:1.1,offLabel:'듣기',
@@ -934,6 +936,14 @@ const LAYERS={
         g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.12,t+1);g.gain.setValueAtTime(.12,t+2.4);g.gain.exponentialRampToValueAtTime(.0001,t+3.4);s.start(t);s.stop(t+3.5);}
     };
     return {src,timers:[setInterval(chatter,120),setInterval(tick,600)]};
+  },
+  fire(out){
+    const flick=amp(.06);
+    const src=[loop(NB.brown,filt('lowpass',480),amp(.34),out),loop(NB.pink,filt('bandpass',850,.6),flick,out)];
+    const flicker=()=>flick.gain.setTargetAtTime(.03+.07*R(),ac.currentTime,.15);
+    const crackle=()=>{const t=ac.currentTime;if(R()<.4)burst(out,t+R()*.09,.008+R()*.02,2500+R()*5000,1.2,.06+R()*.22,.001);};
+    const pop=()=>{const t=ac.currentTime+R()*.5;if(R()<.18){burst(out,t,.06,900+R()*1400,1.5,.3+R()*.15,.002);for(let n=2+Math.floor(R()*5);n>0;n--)burst(out,t+.03+R()*.35,.01+R()*.02,3000+R()*4500,1.2,.05+R()*.12,.001);}};
+    return {src,timers:[setInterval(flicker,200),setInterval(crackle,90),setInterval(pop,700)]};
   },
   white(out){return {src:[loop(NB.white,filt('lowpass',9000),amp(.45),out)],timers:[]};},
   music(out){
