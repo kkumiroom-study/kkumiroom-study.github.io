@@ -1368,7 +1368,7 @@ const LAYERS={
   }
 };
 // cafe playlist: four styles played live in the browser; the next one starts every 3 minutes or on '다음 곡'
-const CAFE_STYLES=['로파이 재즈','보사노바','잔잔한 피아노','칠합 비트'];
+const CAFE_STYLES=['로파이 재즈','보사노바','잔잔한 피아노','칠합 비트','새벽 감성 피아노'];
 let cafeStyle=Math.floor(Math.random()*CAFE_STYLES.length),cafeSkip=false;
 LAYERS.cafebgm=function(out){
   const lp=filt('lowpass',2400),comp=ac.createDynamicsCompressor(),rv=ac.createConvolver(),wet=amp(.2);
@@ -1401,7 +1401,16 @@ LAYERS.cafebgm=function(out){
       burst(lp,tt,.04,8000,1,e%2?.02:.04,.002,'highpass');
       if(e===0)for(const m of ch){tone(trem,m,tt,beat*7.5,.045,'sine',.03,0,.6);tone(trem,m,tt,beat*7.5,.012,'triangle',.03,8,.6);}
       if(e===0)tone(lp,root-12,tt,beat*3,.45,'sine',.02);if(e===10)tone(lp,root-5,tt,beat*2,.38,'sine',.02);
-      if(R()<.5)burst(lp,t+R()*.3,.006,2000+R()*5000,1,.03+R()*.03,.001);if(e===14&&R()<.5)tone(lp,ch[3]+12,tt,beat*1.5,.04,'sine',.01);}}
+      if(R()<.5)burst(lp,t+R()*.3,.006,2000+R()*5000,1,.03+R()*.03,.001);if(e===14&&R()<.5)tone(lp,ch[3]+12,tt,beat*1.5,.04,'sine',.01);}},
+    {len:60/56,bar:4,lp:1700,wet:.5,play(n,t){if(n%4)return;const beat=60/56,bar=Math.floor(n/4),pass=Math.floor(bar/8);
+      const PROG=[[45,[57,60,64,71]],[41,[53,57,60,64]],[48,[55,60,62,64]],[43,[55,60,62,67]],[40,[55,59,62,64]],[41,[57,60,64,67]],[38,[57,60,64,65]],[40,[56,59,64,68]]];
+      const MELO=[[[1,76],[2,74],[3,72]],[[0,72],[1.5,69],[3,67]],[[1,67],[2,72],[2.5,74],[3,76]],[[0,74],[2,71]],[[1,71],[2,72],[3,74]],[[0,76],[1.5,77],[2.5,76],[3,72]],[[0,74],[2,69]],[[0,68],[2,71],[3,76]]];
+      const felt=(m,tt,p,d)=>{tone(lp,m,tt,d,p,'sine',.028);tone(lp,m+12,tt,d*.45,p*.16,'sine',.02);tone(lp,m,tt,d*.3,p*.08,'triangle',.02);burst(lp,tt,.05,900,.8,p*.12,.004);};
+      const [root,ch]=PROG[bar%8];
+      felt(root-12,t,.13,6);felt(root-5,t+.02,.07,5.5);
+      [[.5,0],[1.5,1],[2.5,2],[3.25,3]].forEach(([b,k])=>{if(R()<.85)felt(ch[k],t+b*beat+(R()-.5)*.03,.045+R()*.012,4);});
+      if(pass>0||bar>=2)for(const [b,m] of MELO[bar%8]){if(R()<.12)continue;const up=pass%2===1&&R()<.4?12:0;felt(m+up,t+b*beat+(R()-.5)*.04,.085+R()*.02,4.5);}
+      if(R()<.3)felt([84,86,88,91][Math.floor(R()*4)],t+beat*(2+R()*1.5),.03,3);}}
   ];
   const st={t:ac.currentTime+.15,n:0,style:cafeStyle,since:ac.currentTime};
   const useStyle=k=>{const S=STY[k];lp.frequency.setTargetAtTime(S.lp,ac.currentTime,.3);wet.gain.setTargetAtTime(S.wet,ac.currentTime,.3);};
