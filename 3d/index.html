@@ -1664,7 +1664,7 @@ function seat3(p){if(!p.seat)return null;return SEAT3D.get(p.seat.id)||null;}
 function tagPos(p){
   if(!T3)return [-999,-999];
   const s3=seat3(p),v=new three.Vector3();
-  if(s3)v.set(s3.x,1.62,s3.z);else if(p.isMe)v.set(me3.x,1.95,me3.z);else{const [x,z]=from2d(p.x,p.y);v.set(x,1.95,z);}
+  if(s3)v.set(s3.x,1.62,s3.z);else if(p.isMe)v.set(me3.x,1.42,me3.z);else{const [x,z]=from2d(p.x,p.y);v.set(x,1.42,z);}
   v.project(T3.cam);if(v.z>1)return [-999,-999];
   return [(v.x+1)/2*vw,(1-v.y)/2*vh];
 }
@@ -1759,84 +1759,124 @@ function makeAnimal(kind,hueV){
   const eye=M(0x1c1612,{r:.3});add(new THREE.SphereGeometry(.026,10,8),eye,-.08,.02,-.215,{parent:head});add(new THREE.SphereGeometry(.026,10,8),eye,.08,.02,-.215,{parent:head});
   add(new THREE.SphereGeometry(.035,10,8),M(kind==='owl'?0xe0a040:0x5a3a2a),0,-.04,-.23,{parent:head,s:[1,.8,.6]});
   const bl=M(0xf0a0a0,{r:.9});add(new THREE.SphereGeometry(.03,10,8),bl,-.14,-.05,-.19,{parent:head,s:[1,.6,.4]});add(new THREE.SphereGeometry(.03,10,8),bl,.14,-.05,-.19,{parent:head,s:[1,.6,.4]});
-  add(new THREE.CapsuleGeometry(.06,.2,6,10),sw,-.2,.86,-.18,{parent:g,rx:-1.1});add(new THREE.CapsuleGeometry(.06,.2,6,10),sw,.2,.86,-.18,{parent:g,rx:-1.1});
-  T3.scene.add(g);return {g,head};
+  const limb=(x,y,len,r,mat)=>{const j=new THREE.Group();j.position.set(x,y,0);g.add(j);add(new THREE.CapsuleGeometry(r,len,6,10),mat,0,-len/2-r*.4,0,{parent:j});return j;};
+  const armL=limb(-.24,.95,.2,.06,sw),armR=limb(.24,.95,.2,.06,sw);
+  const pants=M(0x3b3a48,{r:.9}),legL=limb(-.1,.52,.16,.07,pants),legR=limb(.1,.52,.16,.07,pants);
+  T3.scene.add(g);return {g,head,armL,armR,legL,legR,walkPh:0};
 }
 let joy={x:0,y:0};
-let me3={x:5.2,z:4.4,ry:Math.PI*.8},walk3=null,pend3=null,pendT=0,last3=0,wasSeat=null;
+let me3={x:5.2,z:4.4,ry:Math.PI*.8},path3=[],pend3=null,last3=0,wasSeat=null,camOff=0,lastPanX=0,goal3=null;
 const to2d=(x,z)=>[(x+8)*30,(z+6)*30],from2d=(x,y)=>[x/30-8,y/30-6];
-function free3(x,z){if(!T3)return true;if(x<-6.85||x>7.5||z<-4.2||z>11.5)return false;for(const [x0,x1,z0,z1] of T3.OB)if(x>x0-.22&&x<x1+.22&&z>z0-.22&&z<z1+.22)return false;for(const [px,pz,r] of T3.PL)if(Math.hypot(x-px,z-pz)<r)return false;return true;}
-function segFree(ax,az,bx,bz){const d=Math.hypot(bx-ax,bz-az),n=Math.max(1,Math.ceil(d/.18));for(let i=1;i<=n;i++){const t=i/n;if(!free3(ax+(bx-ax)*t,az+(bz-az)*t))return false;}return true;}
-// simple route finding: straight if clear, otherwise along one of the aisles between the booth islands
-function route3(tx,tz){
-  if(segFree(me3.x,me3.z,tx,tz))return [{x:tx,z:tz}];
-  const AIS=[-3.75,-1.15,1.6,3.6];let best=null;
-  for(const a of AIS){const pts=[{x:me3.x,z:a},{x:tx,z:a},{x:tx,z:tz}];let ok=segFree(me3.x,me3.z,pts[0].x,pts[0].z),len=Math.abs(a-me3.z)+Math.abs(tx-me3.x)+Math.abs(tz-a);
-    for(let i=0;ok&&i<2;i++)ok=segFree(pts[i].x,pts[i].z,pts[i+1].x,pts[i+1].z);
-    if(ok&&(!best||len<best.len))best={pts,len};}
-  if(!best)for(const a of AIS)for(const sx of [-6.4,-1.0,3.9,6.9]){const pts=[{x:me3.x,z:a},{x:sx,z:a},{x:sx,z:tz},{x:tx,z:tz}];let ok=segFree(me3.x,me3.z,pts[0].x,pts[0].z);for(let i=0;ok&&i<3;i++)ok=segFree(pts[i].x,pts[i].z,pts[i+1].x,pts[i+1].z);if(ok){best={pts};break;}}
-  return best?best.pts:[{x:tx,z:tz}];
+const angLerp=(a,b,k)=>{let d=((b-a+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;return a+d*k;};
+const B3={x0:-7.0,x1:7.6,z0:-4.2,z1:11.6};
+function free3(x,z,pad){if(!T3)return true;const r=pad??.22;if(x<B3.x0+.15||x>B3.x1-.1||z<B3.z0||z>B3.z1)return false;for(const [x0,x1,z0,z1] of T3.OB)if(x>x0-r&&x<x1+r&&z>z0-r&&z<z1+r)return false;for(const [px,pz,pr] of T3.PL)if(Math.hypot(x-px,z-pz)<pr+r-.22)return false;return true;}
+function segFree(ax,az,bx,bz){const d=Math.hypot(bx-ax,bz-az),n=Math.max(1,Math.ceil(d/.15));for(let i=1;i<=n;i++){const t=i/n;if(!free3(ax+(bx-ax)*t,az+(bz-az)*t))return false;}return true;}
+// A* on 0.5 m cells, then keep only the turning points (straight stretches merged)
+const CELL=.5;let GRID=null;
+function buildGrid(){const nx=Math.ceil((B3.x1-B3.x0)/CELL),nz=Math.ceil((B3.z1-B3.z0)/CELL),f=new Uint8Array(nx*nz);for(let j=0;j<nz;j++)for(let i=0;i<nx;i++)f[j*nx+i]=free3(B3.x0+(i+.5)*CELL,B3.z0+(j+.5)*CELL,.28)?1:0;GRID={nx,nz,f};}
+const cellOf=(x,z)=>[clamp(Math.floor((x-B3.x0)/CELL),0,GRID.nx-1),clamp(Math.floor((z-B3.z0)/CELL),0,GRID.nz-1)];
+const cellXZ=(i,j)=>[B3.x0+(i+.5)*CELL,B3.z0+(j+.5)*CELL];
+function nearestFree(i,j){const {nx,nz,f}=GRID;if(f[j*nx+i])return [i,j];for(let r=1;r<12;r++)for(let dj=-r;dj<=r;dj++)for(let di=-r;di<=r;di++){const a=i+di,b=j+dj;if(a>=0&&b>=0&&a<nx&&b<nz&&f[b*nx+a])return [a,b];}return null;}
+function astar(sx,sz,tx,tz){
+  if(!GRID)buildGrid();const {nx,nz,f}=GRID;
+  let s0=nearestFree(...cellOf(sx,sz)),t0=nearestFree(...cellOf(tx,tz));if(!s0||!t0)return [];
+  const S=s0[1]*nx+s0[0],T=t0[1]*nx+t0[0],g=new Float32Array(nx*nz).fill(1e9),from=new Int32Array(nx*nz).fill(-1),open=[S],inOpen=new Uint8Array(nx*nz),closed=new Uint8Array(nx*nz);
+  const h=k=>{const dx=Math.abs(k%nx-t0[0]),dz=Math.abs(((k/nx)|0)-t0[1]);return Math.max(dx,dz)+.414*Math.min(dx,dz);};
+  g[S]=0;inOpen[S]=1;let guard=0;
+  while(open.length&&guard++<6000){let bi=0,bf=1e9;for(let q=0;q<open.length;q++){const k=open[q],fv=g[k]+h(k);if(fv<bf){bf=fv;bi=q;}}
+    const k=open[bi];open.splice(bi,1);inOpen[k]=0;if(k===T)break;closed[k]=1;const ci=k%nx,cj=(k/nx)|0;
+    for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const a=ci+di,b=cj+dj;if(a<0||b<0||a>=nx||b>=nz)continue;const n=b*nx+a;if(!f[n]||closed[n])continue;if(di&&dj&&(!f[cj*nx+a]||!f[b*nx+ci]))continue;
+      const ng=g[k]+(di&&dj?1.414:1);if(ng<g[n]){g[n]=ng;from[n]=k;if(!inOpen[n]){open.push(n);inOpen[n]=1;}}}}
+  if(from[T]<0&&S!==T)return [{x:tx,z:tz}];
+  const pts=[];for(let k=T;k!==S&&k>=0;k=from[k]){const [x,z]=cellXZ(k%nx,(k/nx)|0);pts.unshift({x,z});}
+  pts.push({x:tx,z:tz});
+  const out=[];let cur={x:sx,z:sz},i=0;
+  while(i<pts.length){let far=i;for(let q=pts.length-1;q>i;q--)if(segFree(cur.x,cur.z,pts[q].x,pts[q].z)){far=q;break;}out.push(pts[far]);cur=pts[far];i=far+1;}
+  return out;
 }
-let route=[];
-function walkTo3(x,z){route=route3(x,z);walk3=route.shift();}
-function goSeat3(id){const s3=SEAT3D.get(id);pend3=id;pendT=performance.now();if(s3.bar)walkTo3(s3.x+.7,s3.z);else walkTo3(s3.x,s3.z-.75);}
+const pathLen=(x,z,pts)=>{let L=0,px=x,pz=z;for(const p of pts){L+=Math.hypot(p.x-px,p.z-pz);px=p.x;pz=p.z;}return L;};
+function walkTo3(x,z){if(!free3(x,z)){const c=nearestFree(...cellOf(x,z));if(c)[x,z]=cellXZ(...c);}path3=astar(me3.x,me3.z,x,z);goal3={x,z};}
+function goSeat3(id){const s3=SEAT3D.get(id);pend3=id;const ax=s3.bar?s3.x+.7:s3.x,az=s3.bar?s3.z:s3.z-.75;path3=astar(me3.x,me3.z,ax,az);goal3={x:ax,z:az};}
 function marker3(pt){if(!T3)return;T3.mk.position.set(pt.x,.02,pt.z);T3.mk.material.opacity=.9;}
+function moveFree(x,z,dx,dz){const nx=x+dx,nz=z+dz;if(free3(nx,nz))return [nx,nz,true];if(free3(nx,z))return [nx,z,true];if(free3(x,nz))return [x,nz,true];return [x,z,false];}
+let mySpeed=0;
 function step3(dt){
-  if(me.seat){walk3=null;pend3=null;return false;}
-  let vx=0,vz=0;
-  const yaw=T3.yaw||0,fx=-Math.sin(yaw),fz=-Math.cos(yaw);
-  if(keys.has('up')){vx+=fx;vz+=fz;}if(keys.has('down')){vx-=fx;vz-=fz;}if(keys.has('left')){vx+=fz;vz-=fx;}if(keys.has('right')){vx-=fz;vz+=fx;}
-  if(vx||vz){walk3=null;pend3=null;route=[];}
-  else if(walk3){const dx=walk3.x-me3.x,dz=walk3.z-me3.z,d=Math.hypot(dx,dz);if(d<.12){walk3=route.length?route.shift():null;}else{vx=dx/d;vz=dz/d;}}
-  if(!vx&&!vz&&(joy.x||joy.y)){walk3=null;pend3=null;route=[];vx=fx*-joy.y+fz*joy.x*-1;vz=fz*-joy.y-fx*joy.x*-1;}
-  if(pend3){const s3=SEAT3D.get(pend3),seat=seatById.get(pend3),near=Math.hypot(s3.x-me3.x,s3.z-me3.z)<1.0;
-    if(!isSeatOpen(seat)){toast('그 사이에 다른 분이 앉았어요.');pend3=null;walk3=null;}
-    else if(near||(!walk3&&!route.length)||performance.now()-pendT>9000){pend3=null;walk3=null;route=[];sit(seat);return false;}}
-  if(!vx&&!vz)return false;
-  const l=Math.hypot(vx,vz),sp=2.4*dt,nx=me3.x+vx/l*sp,nz=me3.z+vz/l*sp;
-  if(free3(nx,nz)){me3.x=nx;me3.z=nz;}else if(free3(nx,me3.z))me3.x=nx;else if(free3(me3.x,nz))me3.z=nz;else{walk3=null;}
-  me3.ry=Math.atan2(-vx,-vz);
-  return true;
+  if(me.seat){path3=[];pend3=null;mySpeed=0;return false;}
+  // drag sideways turns the body: a full screen width is about 200 degrees
+  const dPan=panX-lastPanX;lastPanX=panX;if(dPan){me3.ry+=dPan/Math.max(320,vw)*3.49;}
+  if(panX){panX=0;lastPanX=0;}
+  if(keys.has('left'))me3.ry+=2.2*dt;if(keys.has('right'))me3.ry-=2.2*dt;
+  const fx=-Math.sin(me3.ry),fz=-Math.cos(me3.ry);let moved=false;
+  let fw=(keys.has('up')?1:0)-(keys.has('down')?1:0);
+  if(fw){path3=[];pend3=null;const sp=3.0*dt*fw;const r=moveFree(me3.x,me3.z,fx*sp,fz*sp);me3.x=r[0];me3.z=r[1];moved=r[2];mySpeed=3;}
+  else if(joy.x||joy.y){path3=[];pend3=null;const cy=T3.camYaw??me3.ry,cfx=-Math.sin(cy),cfz=-Math.cos(cy),vx=cfx*-joy.y+cfz*-joy.x*-1,vz=cfz*-joy.y-cfx*-joy.x*-1,l=Math.hypot(vx,vz)||1,mag=Math.min(1,Math.hypot(joy.x,joy.y)),sp=3.4*mag*dt;
+    const r=moveFree(me3.x,me3.z,vx/l*sp,vz/l*sp);me3.x=r[0];me3.z=r[1];moved=r[2];me3.ry=angLerp(me3.ry,Math.atan2(-vx,-vz),1-Math.exp(-dt*10));mySpeed=3.4*mag;}
+  else if(path3.length){
+    const p=path3[0],dx=p.x-me3.x,dz=p.z-me3.z,d=Math.hypot(dx,dz),rem=pathLen(me3.x,me3.z,path3);
+    const sp=(3.4+clamp((rem-2)/8,0,1)*5.6)*Math.min(1,rem/.8+.25);mySpeed=sp;
+    if(d<=sp*dt||d<.05){me3.x=p.x;me3.z=p.z;path3.shift();}else{const r=moveFree(me3.x,me3.z,dx/d*sp*dt,dz/d*sp*dt);if(!r[2]){path3=goal3?astar(me3.x,me3.z,goal3.x,goal3.z):[];}me3.x=r[0];me3.z=r[1];}
+    me3.ry=angLerp(me3.ry,Math.atan2(-dx,-dz),1-Math.exp(-dt*9));moved=true;
+  }else mySpeed=0;
+  if(pend3&&!path3.length){const seat=seatById.get(pend3);pend3=null;if(isSeatOpen(seat))sit(seat);else toast('그 사이에 다른 분이 앉았어요.');return false;}
+  if(moved)camOff*=Math.exp(-dt*2.2);
+  return moved;
+}
+// background people who wander between bookshelves, the window and the aisles (each phone moves them on its own)
+const WP=[[-5.5,-3.85],[-2.2,-3.85],[1.8,-3.85],[5.6,-3.85],[-6.2,-1.9],[-6.2,2.0],[4.4,-1.15],[-3.0,1.7],[2.2,1.7],[5.8,3.4],[0,4.6],[-4.2,4.4],[6.6,-1.2],[-1,6.5]];
+const WANDER=Array.from({length:8},(_,i)=>{const w=WP[(i*5)%WP.length];return {key:'w'+i,kind:['owl','cat','rabbit','fox','panda','squirrel','penguin','bear'][i],hue:[20,200,330,140,45,265,180,0][i],x:w[0]+.1,z:w[1]+.1,ry:0,path:[],wait:1+i*.7,speed:1.05+((i*37)%56)/100,ph:i*1.3};});
+function stepWander(dt){for(const w of WANDER){if(w.wait>0){w.wait-=dt;continue;}
+  if(!w.path.length){const t=WP[Math.floor(Math.random()*WP.length)];w.path=astar(w.x,w.z,t[0]+(Math.random()-.5)*.6,t[1]+(Math.random()-.5)*.4);if(!w.path.length){w.wait=2;continue;}}
+  const p=w.path[0],dx=p.x-w.x,dz=p.z-w.z,d=Math.hypot(dx,dz),sp=w.speed*dt;
+  if(d<=sp){w.x=p.x;w.z=p.z;w.path.shift();if(!w.path.length){w.wait=2+Math.random()*4;if(w.z<-3.5)w.face=0;else w.face=null;}}else{w.x+=dx/d*sp;w.z+=dz/d*sp;}
+  w.ry=angLerp(w.ry,d>.01?Math.atan2(-dx,-dz):w.ry,1-Math.exp(-dt*8));w.moving=d>.01&&w.wait<=0;}}
+function poseLimbs(a,walking,speed,t,seated){
+  if(seated){a.legL.rotation.x=a.legR.rotation.x=1.45;a.armL.rotation.x=a.armR.rotation.x=-1.0;return;}
+  if(walking){a.walkPh+=(speed||1.3)*.016*5.2;const sw=Math.sin(a.walkPh)*.7;a.legL.rotation.x=sw;a.legR.rotation.x=-sw;a.armL.rotation.x=-sw*.8;a.armR.rotation.x=sw*.8;}
+  else{a.legL.rotation.x*=.8;a.legR.rotation.x*=.8;a.armL.rotation.x=a.armL.rotation.x*.8+(-.15)*.2;a.armR.rotation.x=a.armR.rotation.x*.8+(-.15)*.2;}
 }
 function render3d(t){
   if(!T3)return;
   const {cam,actors}=T3,dt=Math.min(.05,last3?t-last3:0);last3=t;
-  // stood up: step back into the aisle behind the seat
-  if(wasSeat&&!me.seat){const s3=SEAT3D.get(wasSeat);if(s3){me3.x=s3.bar?s3.x+.8:s3.x;me3.z=s3.bar?s3.z:s3.z-.8;}}
+  if(wasSeat&&!me.seat){const s3=SEAT3D.get(wasSeat);if(s3){me3.x=s3.bar?s3.x+.8:s3.x;me3.z=s3.bar?s3.z:s3.z-.8;me3.ry=s3.face;}}
+  if(!wasSeat&&me.seat){camOff=0;}
   wasSeat=me.seat?me.seat.id:null;
-  const moving=step3(dt);
+  const moving=step3(dt);stepWander(dt);
   {const [x2,y2]=to2d(me3.x,me3.z);me.x=x2;me.y=y2;me.moving=moving;const a=me3.ry;me.dir=Math.abs(Math.sin(a))>Math.abs(Math.cos(a))?(Math.sin(a)<0?'right':'left'):(Math.cos(a)<0?'down':'up');}
   if(T3.mk.material.opacity>0)T3.mk.material.opacity=Math.max(0,T3.mk.material.opacity-dt*.9);
-  // empty seats glow softly while you are looking for a place
   if(!T3.glowT||t-T3.glowT>.4){T3.glowT=t;for(const [id,g] of T3.freeGlow){const st=seatById.get(id);g.visible=!me.seat&&isSeatFree(st);}}
-  {const a=.35+.25*Math.sin(t*2.6);for(const g of T3.freeGlow.values())if(g.visible)g.material.opacity=a;}
-  // keep it smooth on slower phones: drop resolution and shadows if frames get slow
+  {const ga=.35+.25*Math.sin(t*2.6);for(const g of T3.freeGlow.values())if(g.visible)g.material.opacity=ga;}
   if(dt>0){T3.ft=(T3.ft||.016)*.95+dt*.05;if(!T3.low&&t>6&&T3.ft>.045){T3.low=true;T3.r.setPixelRatio(1);T3.r.shadowMap.enabled=false;T3.scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}}
-  const list=[...NPCS.map((n,i)=>({key:'npc'+i,p:n})),...[...peers.values()].map(p=>({key:p.peer,p})),{key:'me',p:me}];
+  const list=[...NPCS.map((n,i)=>({key:'npc'+i,p:n})),...WANDER.map(w=>({key:w.key,p:w,wander:true})),...[...peers.values()].map(p=>({key:p.peer,p})),{key:'me',p:me}];
   const seen=new Set();
-  for(const {key,p} of list){
-    const kind=kindOf(p),sig=kind+'|'+(p.isMe?hue:p.hue);
+  for(const {key,p,wander} of list){
+    const kind=wander?p.kind:kindOf(p),hv=wander?p.hue:(p.isMe?hue:p.hue||200),sig=kind+'|'+hv;
     let a=actors.get(key);
-    if(!a||a.sig!==sig){if(a)T3.scene.remove(a.g);a=makeAnimal(kind,p.isMe?hue:p.hue||200);a.sig=sig;a.key=key;actors.set(key,a);if(p.peer)a.g.userData.pick={peer:p.peer};}
+    if(!a||a.sig!==sig){if(a)T3.scene.remove(a.g);a=makeAnimal(kind,hv);a.sig=sig;a.key=key;actors.set(key,a);if(p.peer)a.g.userData.pick={peer:p.peer};}
     seen.add(key);
-    const s3=seat3(p),off=(p.phaseOff||key.length)*1.7;let walking=false;
+    const s3=wander?null:seat3(p),off=(p.phaseOff||p.ph||key.length)*1.7;let walking=false,speed=1.3;
     if(s3){a.g.position.set(s3.x,s3.bar?.25:0,s3.z);a.g.rotation.y=s3.face;}
-    else if(p.isMe){a.g.position.set(me3.x,.3,me3.z);a.g.rotation.y=me3.ry;walking=moving;}
-    else{const [x,z]=from2d(p.x,p.y);const px=a.px??x,pz=a.pz??z;walking=Math.hypot(x-px,z-pz)>.01||p.remoteMoving;if(walking&&Math.hypot(x-px,z-pz)>.003)a.ry=Math.atan2(-(x-px),-(z-pz));a.px=x;a.pz=z;a.g.position.set(x,.3,z);a.g.rotation.y=a.ry??Math.PI;}
+    else if(wander){a.g.position.set(p.x,-.17,p.z);a.g.rotation.y=p.face!=null&&!p.moving?angLerp(a.g.rotation.y,p.face,.1):p.ry;walking=p.moving;speed=p.speed;}
+    else if(p.isMe){a.g.position.set(me3.x,-.17,me3.z);a.g.rotation.y=me3.ry;walking=moving;speed=mySpeed;}
+    else{const [x,z]=from2d(p.x,p.y);const px=a.px??x,pz=a.pz??z,v=Math.hypot(x-px,z-pz)/Math.max(dt,.001);walking=v>.25||p.remoteMoving;speed=Math.min(9,v);a.px=x;a.pz=z;a.g.position.set(x,-.17,z);
+      const want=p.ry3!=null?p.ry3:(walking?Math.atan2(-(x-(a.ox??x)),-(z-(a.oz??z))):a.ry??Math.PI);a.ox=x;a.oz=z;a.ry=angLerp(a.ry??want,want,1-Math.exp(-dt*9));a.g.rotation.y=a.ry;}
+    poseLimbs(a,walking,speed,t,!!s3&&!s3.bar);
     a.head.rotation.x=reduceMotion||walking?0:Math.max(0,Math.sin(t*.9+off))*.12;
-    a.g.position.y+=reduceMotion?0:walking?Math.abs(Math.sin(t*11+off))*.06:Math.sin(t*2+off)*.006;
+    a.g.position.y+=reduceMotion?0:walking?Math.abs(Math.sin(a.walkPh))*.05:Math.sin(t*2+off)*.006;
   }
   for(const [k,a] of actors)if(!seen.has(k)){T3.scene.remove(a.g);actors.delete(k);}
-  // camera orbits around me: drag turns (left/right, up/down), pinch or +/- zooms
+  // camera: third person behind my back (seated: in front so faces show), drag turns, pinch / wheel zooms
   const mine=seat3(me);
-  const fx=mine?mine.x:me3.x,fz=mine?mine.z:me3.z,baseYaw=mine?(mine.bar?Math.PI/2+.5:.45):.62;
-  const yaw=baseYaw-panX*.0065,pitch=clamp((mine?.62:.74)+panY*.0045,.06,1.38);T3.yaw=yaw;
-  const dist=(mine?4.6:6.4)/clamp(viewZoom,.35,3);
-  const tgt=new T3.THREE.Vector3(fx,mine?1.0:1.1,fz);
-  const want=new T3.THREE.Vector3(fx+Math.sin(yaw)*Math.cos(pitch)*dist,tgt.y+Math.sin(pitch)*dist,fz+Math.cos(yaw)*Math.cos(pitch)*dist);
-  want.y=clamp(want.y,.6,5.6);want.x=clamp(want.x,-7.6,7.6);want.z=clamp(want.z,-4.6,13);
+  if(mine&&panX){camOff+=(panX-lastPanX)*-.0065;lastPanX=panX;}
+  if(mine){panX=0;lastPanX=0;}
+  const camYaw=mine?(mine.bar?mine.face+Math.PI:Math.PI+.35)+camOff:me3.ry+camOff;T3.camYaw=camYaw;
+  const pitch=clamp((mine?.55:.38)+panY*.0045,.05,1.3),dist=(mine?4.2:4.4)/clamp(viewZoom,.35,3);
+  const fx=mine?mine.x:me3.x,fz=mine?mine.z:me3.z;
+  const tgt=new T3.THREE.Vector3(fx,mine?.95:1.05,fz);
+  const want=new T3.THREE.Vector3(fx+Math.sin(camYaw)*Math.cos(pitch)*dist,tgt.y+Math.sin(pitch)*dist,fz+Math.cos(camYaw)*Math.cos(pitch)*dist);
+  // keep the camera inside the room (no looking through walls or bookshelves)
+  want.x=clamp(want.x,B3.x0-.5,B3.x1-.2);want.z=clamp(want.z,B3.z0+.2,B3.z1+1.5);want.y=clamp(want.y,.55,5.6);
   if(!T3.cur)T3.cur={p:want.clone(),t:tgt.clone()};
-  const k=reduceMotion?1:Math.min(1,dt*(dragging?18:6));T3.cur.p.lerp(want,k);T3.cur.t.lerp(tgt,k);cam.position.copy(T3.cur.p);cam.lookAt(T3.cur.t);
+  const k=reduceMotion?1:Math.min(1,dt*(dragging?16:7));T3.cur.p.lerp(want,k);T3.cur.t.lerp(tgt,k);cam.position.copy(T3.cur.p);cam.lookAt(T3.cur.t);
   if(!reduceMotion)T3.rainTex.offset.y=(t*.35)%1;
   T3.r.render(T3.scene,cam);
 }
@@ -1870,7 +1910,7 @@ function frame(nowMs){
   }else if(lampLevel<1)lampLevel=Math.min(1,lampLevel+dt*1.6);
   for(const p of peers.values()){
     const k=Math.min(1,dt*10),dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy);
-    if(d>160){p.x=p.tx;p.y=p.ty;}else{p.x+=dx*k;p.y+=dy*k;}
+    if(d>240){p.x=p.tx;p.y=p.ty;}else{p.x+=dx*k;p.y+=dy*k;}
     p.moving=!p.seat&&(d>1.2||p.remoteMoving);
   }
   updateCamera(dt);
@@ -2066,6 +2106,7 @@ function syncPeers(list){
     r.skin=num(pr.k)!==null?Math.abs(pr.k|0)%SKIN.length:0;
     r.goal=typeof pr.g==='string'?cleanText(pr.g,24):'';
     r.since=num(pr.t)||0;
+    r.ry3=num(pr.ry);
     r.cf=num(pr.cf)!==null?clamp(pr.cf|0,0,99):0;
     r.pk=typeof pr.pk==='string'&&pr.pk.length>40&&pr.pk.length<200?pr.pk:null;
     r.tp=Array.isArray(pr.tp)&&pr.tp.length===2?[Math.max(0,pr.tp[0]|0),Math.max(0,pr.tp[1]|0)]:null;
@@ -2142,10 +2183,11 @@ function sendPresence(force,away){
   const pres={id:uid,x:Math.round(me.x),y:Math.round(me.y),d:me.dir,s:me.seat?me.seat.id:null,n:nick,h:hue,a:hairIdx,k:skinIdx,g:me.seat?goal:'',t:me.seat&&sess?sess.start:0,m:me.moving?1:0,bg:away||document.hidden?1:0};
   if(tasks.length)pres.tp=[taskDone(),tasks.length];
   if(myPk)pres.pk=myPk;
+  if(typeof me3!=='undefined')pres.ry=Math.round(me3.ry*100)/100;
   if(coffeesToday)pres.cf=coffeesToday;
   if(!me.seat&&lastSit&&lastSit.room===roomId&&lastSit.day===kstDay(Date.now())){pres.ls=lastSit.seat;pres.lt=lastSit.start;pres.lm=lastSit.min;pres.lg=goal;}
   const key=JSON.stringify(pres),now=Date.now();
-  if(force!==true&&(key===lastPres?now-lastWrite<4000:now-lastSend<250))return;
+  if(force!==true&&(key===lastPres?now-lastWrite<4000:now-lastSend<140))return;
   lastPres=key;lastWrite=lastSend=now;pres.ts=now;
   client.publish(myTopic,JSON.stringify(pres),{qos:0,retain:true});
 }
@@ -2348,7 +2390,7 @@ async function connectRoom(){
         client.on('connect',join);join();
         client.on('offline',()=>{roomLive=false;renderPeople();});
         client.on('close',()=>{if(roomLive){roomLive=false;renderPeople();}});
-        setInterval(sendPresence,150);setInterval(schedule,2000);setInterval(()=>{if(me.seat)sendVisit();},60000);
+        setInterval(sendPresence,140);setInterval(schedule,2000);setInterval(()=>{if(me.seat)sendVisit();},60000);
         saveResume();
         if(!resume)toast(`${roomLabel(roomId)}에 들어왔어요. 이 방 링크를 보내면 친구가 같은 방으로 와요.`,5000);
         renderPeople();return;
