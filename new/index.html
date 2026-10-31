@@ -1300,7 +1300,7 @@ function drawTags(){
     if(sx<-80||sx>vw+80||sy<-40||sy>vh+40)continue;
     const nm=p.isMe?nick:p.nick;
     let text=nm;
-    if(p.seat){const mins=p.isMe?Math.floor((sess?sess.sec:0)/60):p.fixedMin!=null?p.fixedMin:(p.since?Math.max(0,Math.floor((now-p.since)/60000)):0);text=`${nm} · ${mins}분`;}
+    if(p.seat&&!p.ghost){const mins=p.isMe?Math.floor((sess?sess.sec:0)/60):p.fixedMin!=null?p.fixedMin:(p.since?Math.max(0,Math.floor((now-p.since)/60000)):0);text=`${nm} · ${mins}분`;}
     const top=tag(sx,sy,text,p.isMe?'me':'peer');
     const gl=p.isMe?goal:p.goal,tp=p.isMe?(tasks.length?[taskDone(),tasks.length]:null):p.tp;
     let btop=top;
