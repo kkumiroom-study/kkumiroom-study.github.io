@@ -1680,7 +1680,29 @@ function lofiPost(dt){
   if(!reduceMotion){if(!grainPat)grainPat=ctx.createPattern(grainCv,'repeat');const ox=(Math.random()*128)|0,oy=(Math.random()*128)|0;ctx.globalAlpha=.55;ctx.fillStyle=grainPat;ctx.translate(-ox,-oy);ctx.fillRect(ox,oy,w,h);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;}
 }
 
+// everyone who sits keeps doing something: writing, reading a book, thinking, sipping coffee, stretching now and then
+const ease=(x)=>x<0?0:x>1?1:x*x*(3-2*x);
+function seatedLife(a,key,t,off,s3){
+  let h=0;for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;
+  const lounge=s3.kind==='lounge',ACTS=lounge?['read','read','think','sip']:['write','read','write','think','sip','read'];
+  const L=17+(h%9),tt=t+(h%997),seg=Math.floor(tt/L),ph=(tt%L)/L,act=ACTS[(seg+h)%ACTS.length];
+  const blend=ease(Math.min(ph,1-ph)*8);
+  if(!a.book){a.book=new three.Group();const c=T3.M([0x9c4a3e,0x3f6a85,0x5a7d4e,0x6f5584][h%4]),pg=T3.M(0xf3ecdc);T3.add(new three.BoxGeometry(.3,.21,.03),c,0,0,0,{parent:a.book});T3.add(new three.BoxGeometry(.28,.19,.02),pg,0,0,-.014,{parent:a.book});
+    a.page=T3.add(new three.PlaneGeometry(.13,.18),T3.M(0xfffaf0),.07,0,-.03,{parent:a.book});a.book.position.set(0,1.0,-.3);a.book.rotation.x=-.55;a.g.add(a.book);
+    a.cup=new three.Group();T3.add(new three.CylinderGeometry(.045,.04,.1,12),T3.M(0xf3ece0),0,0,0,{parent:a.cup});a.cup.position.set(.2,1.12,-.22);a.g.add(a.cup);}
+  a.book.visible=act==='read'&&blend>.3;a.cup.visible=act==='sip'&&blend>.3;
+  const R=a.armR.rotation,Lr=a.armL.rotation,H=a.head.rotation;
+  R.z=Lr.z=0;H.z=0;
+  if(act==='write'){R.x=-1.05+Math.sin(t*7+off)*.16;R.z=Math.sin(t*2.6+off)*.18;Lr.x=-1.0;H.x=.28+Math.sin(t*1.1+off)*.05;H.z=Math.sin(t*.5+off)*.06;}
+  else if(act==='read'){Lr.x=R.x=-1.0-.75*blend;Lr.z=.35*blend;R.z=-.35*blend;H.x=.2+Math.sin(t*.35+off)*.04;
+    const pt=(tt%6)/6;a.page.rotation.y=pt>.85?(pt-.85)/.15*Math.PI:0;if(pt>.85)R.z=-.35*blend-.4*Math.sin((pt-.85)/.15*Math.PI);}
+  else if(act==='think'){Lr.x=-1.0-1.2*blend;Lr.z=.5*blend;R.x=-1.0;H.x=-.05+.1*Math.sin(t*.4+off);H.z=.18*blend*Math.sin(t*.3+off+1);}
+  else{R.x=-1.0;Lr.x=-1.0;const sp=(tt%5)/5;if(sp<.45){const k=Math.sin(sp/.45*Math.PI)*blend;R.x=-1.0-1.15*k;R.z=-.25*k;H.x=-.15*k;a.cup.position.set(.2-.12*k,1.12+.16*k,-.22+.06*k);}else{H.x=.12;a.cup.position.set(.2,1.12,-.22);}}
+  // a big stretch now and then
+  const sc=(tt+h%40)%(52+h%20);if(sc<2.6){const k=Math.sin(sc/2.6*Math.PI);Lr.x=R.x=-1.0-2.1*k;Lr.z=.25*k;R.z=-.25*k;H.x=-.3*k;a.book.visible=false;a.cup.visible=false;}
+}
 /* ---------- 3D world ---------- */
+
 let T3=null,three=null;
 const T3_ANI={'부엉이':'owl','고양이':'cat','수달':'bear','다람쥐':'squirrel','펭귄':'penguin','여우':'fox','토끼':'rabbit','고래':'whale','판다':'panda','참새':'owl'};
 const kindOf=p=>{if(p.kind)return p.kind;const n=p.isMe?nick:p.nick||'';for(const k in T3_ANI)if(n.endsWith(k))return T3_ANI[k];return 'bear';};
@@ -1942,13 +1964,10 @@ function render3d(t){
     else{const [x,z]=from2d(p.x,p.y);const px=a.px??x,pz=a.pz??z,v=Math.hypot(x-px,z-pz)/Math.max(dt,.001);walking=v>.25||p.remoteMoving;speed=Math.min(9,v);a.px=x;a.pz=z;a.g.position.set(x,-.17,z);
       const want=p.ry3!=null?p.ry3:(walking?Math.atan2(-(x-(a.ox??x)),-(z-(a.oz??z))):a.ry??Math.PI);a.ox=x;a.oz=z;a.ry=angLerp(a.ry??want,want,1-Math.exp(-dt*9));a.g.rotation.y=a.ry;}
     poseLimbs(a,walking,speed,t,!!s3);
-    if(s3&&key.startsWith('npc')){const n=+key.slice(3),st=n%3;
-      if(st===1){a.armL.rotation.x=a.armR.rotation.x=-1.75;a.armL.rotation.z=.35;a.armR.rotation.z=-.35;a.head.rotation.x=.22+Math.sin(t*.4+off)*.03;
-        if(!a.book){a.book=new three.Group();const c=T3.M(0x9c4a3e),pg=T3.M(0xf3ecdc);T3.add(new three.BoxGeometry(.28,.2,.03),c,0,0,0,{parent:a.book});T3.add(new three.BoxGeometry(.26,.18,.02),pg,0,0,-.012,{parent:a.book});a.book.position.set(0,.98,-.3);a.book.rotation.x=-.5;a.g.add(a.book);}}
-      else{a.armR.rotation.x=-1.0+Math.sin(t*5.5+off)*.1;a.armR.rotation.z=Math.sin(t*2.2+off)*.08;
-        const cyc=(t+off*7)%28;if(st===2&&cyc<2.2){const k=Math.sin(cyc/2.2*Math.PI);a.armL.rotation.x=a.armR.rotation.x=-1.0-k*2.0;a.head.rotation.x=-.2*k;}}}
-    a.head.rotation.x=reduceMotion||walking?0:Math.max(0,Math.sin(t*.9+off))*.12;
+    if(!s3)a.head.rotation.x=reduceMotion||walking?0:Math.max(0,Math.sin(t*.9+off))*.12;
     a.g.position.y+=reduceMotion?0:walking?Math.abs(Math.sin(a.walkPh))*.05:Math.sin(t*2+off)*.006;
+    if(s3&&!reduceMotion)seatedLife(a,key,t,off,s3);
+    else{a.head.rotation.z=0;if(a.book)a.book.visible=false;if(a.cup)a.cup.visible=false;}
   }
   for(const [k,a] of actors)if(!seen.has(k)){T3.scene.remove(a.g);actors.delete(k);}
   // desks of people who are studying get their books and notebook
