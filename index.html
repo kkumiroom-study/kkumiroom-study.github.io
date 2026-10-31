@@ -156,6 +156,11 @@ button.stat{font:inherit;font-size:13.5px;cursor:pointer}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;background:var(--paper);color:var(--night)}
 
 .bottom{display:flex;flex-direction:column;align-items:center;gap:10px}
+.cafe-now{position:fixed;z-index:5;left:50%;transform:translateX(-50%);bottom:calc(var(--dock-h,0px) + 26px);display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border-radius:999px;font-size:12.5px;color:var(--paper);white-space:nowrap}
+.cafe-now[hidden]{display:none}
+.cafe-now b{color:var(--lamp);font-weight:600}
+.cafe-now button{border:0;border-radius:999px;background:var(--lamp);color:var(--lamp-ink);font:600 12px var(--f-ui);padding:6px 10px;cursor:pointer}
+body:not(.is-seated) .cafe-now{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 .hint{margin:0;font-size:12px;color:var(--muted);padding:6px 12px;border-radius:999px;text-align:center;max-width:100%}
 .seat-btn{display:flex;align-items:center;gap:12px;border:0;cursor:pointer;background:var(--lamp);color:var(--lamp-ink);
   padding:12px 24px 12px 14px;border-radius:999px;text-align:left;box-shadow:0 10px 34px rgba(255,195,90,.28),0 0 0 6px rgba(255,195,90,.12);transition:transform .15s ease}
@@ -411,6 +416,7 @@ button.stat{font:inherit;font-size:13.5px;cursor:pointer}
   </div>
 </div>
 
+<div id="cafeNow" class="cafe-now glass" hidden aria-live="polite"><span>♪ 카페 음악 · <b id="cafeNowTxt">로파이 재즈</b></span><button id="cafeNext" type="button">다음 곡 ⏭</button></div>
 <button id="sndHint" class="snd-hint" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>눌러서 빗소리 켜기</button>
 <div class="view-ctl" aria-label="화면 보기">
   <button id="zoomIn" class="vbtn glass" aria-label="확대">+</button>
@@ -1281,6 +1287,7 @@ function applySound(instant){
   for(const k of KEYS)set(bus[k],snd[k].on?snd[k].vol/100*META[k].gain:0);
   for(const k of LAYER_KEYS){const want=snd.master&&snd[k].on&&(k!=='cafebgm'||inCafe);if(want&&!layers[k])startLayer(k);else if(!want&&layers[k])stopLayer(k);}
   rain=layers.rain||null;
+  if(typeof syncCafeNow==='function')syncCafeNow();
 }
 // shared noise: white, pink (softer) and brown (deep rumble), plus a short white burst for little events
 function noise(){
@@ -1360,40 +1367,60 @@ const LAYERS={
     sched();return {src:[],timers:[setInterval(sched,250)]};
   }
 };
+// cafe playlist: four styles played live in the browser; the next one starts every 3 minutes or on '다음 곡'
+const CAFE_STYLES=['로파이 재즈','보사노바','잔잔한 피아노','칠합 비트'];
+let cafeStyle=Math.floor(Math.random()*CAFE_STYLES.length),cafeSkip=false;
 LAYERS.cafebgm=function(out){
-  // lofi jazz trio made on the spot: electric piano comping, walking-ish bass, brushed kit, a little vinyl crackle
-  const lp=filt('lowpass',2400),comp=ac.createDynamicsCompressor();lp.connect(comp);comp.connect(out);
-  const wow=ac.createOscillator(),wowG=amp(7);wow.frequency.value=.3;wow.connect(wowG);wow.start();
-  const beat=60/76,st={t:ac.currentTime+.15,step:0};
-  const ep=(m,t0,dur,peak)=>{for(const [type,det,a] of [['sine',0,1],['triangle',6,.3]]){const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.value=mtof(m);o.detune.value=det;wowG.connect(o.detune);
-    g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(peak*a,t0+.012);g.gain.exponentialRampToValueAtTime(peak*a*.35,t0+.4);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);o.connect(g).connect(lp);o.start(t0);o.stop(t0+dur+.05);}};
-  const bass=(m,t0,dur)=>{const o=ac.createOscillator(),g=ac.createGain(),f=filt('lowpass',380);o.type='triangle';o.frequency.value=mtof(m);
-    g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(.34,t0+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);o.connect(f).connect(g).connect(lp);o.start(t0);o.stop(t0+dur+.05);};
-  const kick=t0=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.setValueAtTime(105,t0);o.frequency.exponentialRampToValueAtTime(44,t0+.18);
-    g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(.42,t0+.004);g.gain.exponentialRampToValueAtTime(.0001,t0+.3);o.connect(g).connect(lp);o.start(t0);o.stop(t0+.33);};
-  const PROG=[[43,[58,62,65,69]],[36,[58,62,64,69]],[41,[57,60,64,67]],[38,[57,60,65,69]],[46,[57,62,65,69]],[45,[55,60,64,67]],[38,[57,60,62,65]],[43,[53,58,62,65]]];
-  const MEL=[65,67,69,72,74,77,79,81];
+  const lp=filt('lowpass',2400),comp=ac.createDynamicsCompressor(),rv=ac.createConvolver(),wet=amp(.2);
+  {const sr=ac.sampleRate,n=Math.round(sr*2.6),bf=ac.createBuffer(2,n,sr);for(let c=0;c<2;c++){const x=bf.getChannelData(c);for(let i=0;i<n;i++)x[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);}rv.buffer=bf;}
+  lp.connect(comp);lp.connect(rv);rv.connect(wet);wet.connect(comp);comp.connect(out);
+  const trem=ac.createGain(),lfo=ac.createOscillator(),lg=amp(.25);trem.gain.value=.75;lfo.frequency.value=4.2;lfo.connect(lg);lg.connect(trem.gain);lfo.start();trem.connect(lp);
+  const tone=(dest,m,t0,dur,peak,type,att,det,sus)=>{const o=ac.createOscillator(),g=ac.createGain();o.type=type||'sine';o.frequency.value=mtof(m);if(det)o.detune.value=det;
+    g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(peak,t0+(att||.01));if(sus)g.gain.exponentialRampToValueAtTime(peak*sus,t0+(att||.01)+.35);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);o.connect(g).connect(dest);o.start(t0);o.stop(t0+dur+.05);};
+  const kick=(t0,pk)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.setValueAtTime(110,t0);o.frequency.exponentialRampToValueAtTime(42,t0+.2);
+    g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(pk,t0+.004);g.gain.exponentialRampToValueAtTime(.0001,t0+.34);o.connect(g).connect(lp);o.start(t0);o.stop(t0+.38);};
+  const ep=(m,t,d,p)=>{tone(lp,m,t,d,p,'sine',.012,0,.35);tone(lp,m,t,d,p*.3,'triangle',.012,6,.35);};
+  const STY=[
+    {len:60/76/2,bar:8,lp:2400,wet:.2,play(n,t){const beat=60/76,e=n%8,PROG=[[43,[58,62,65,69]],[36,[58,62,64,69]],[41,[57,60,64,67]],[38,[57,60,65,69]],[46,[57,62,65,69]],[45,[55,60,64,67]],[38,[57,60,62,65]],[43,[53,58,62,65]]],[root,ch]=PROG[Math.floor(n/8)%8],tt=t+(e%2?beat*.09:0),MEL=[65,67,69,72,74,77,79,81];
+      if(e===0||(e===5&&R()<.6))kick(tt,.42);if(e===2||e===6)burst(lp,tt,.24,1700,.6,.09,.006);burst(lp,tt,.045,7600,1,e%2?.018:.03,.002,'highpass');
+      if(e===0)tone(lp,root,tt,beat*1.7,.34,'triangle',.02);else if(e===4)tone(lp,root+7,tt,beat*1.5,.3,'triangle',.02);else if(e===7&&R()<.7)tone(lp,root+(R()<.5?5:10),tt,beat*.45,.26,'triangle',.02);
+      if(e===0)for(const m of ch)ep(m,tt,beat*1.9,.05);if(e===3&&R()<.75)for(const m of ch)ep(m,tt,beat*1.1,.036);
+      if((e===1||e===5||e===6)&&R()<.33)ep(MEL[Math.floor(R()*8)],tt,beat*1.3,.045);if(R()<.1)burst(lp,tt+R()*.2,.008,2500+R()*3500,1,.025,.001);}},
+    {len:60/132/2,bar:16,lp:3600,wet:.2,play(n,t){const six=60/132/2,e=n%16,bar=Math.floor(n/16)%8,PROG=[[41,[57,60,64,67]],[43,[58,62,65,69]],[36,[58,64,67,70]],[41,[57,60,64,69]],[45,[55,60,64,67]],[38,[54,60,62,66]],[43,[58,62,65,67]],[36,[58,62,64,70]]],[root,ch]=PROG[bar],MEL=[69,72,74,76,77,79,81];
+      const pluck=(m,tt,p)=>{tone(lp,m,tt,.9,p,'triangle',.004,0,.25);tone(lp,m+12,tt,.35,p*.18,'sine',.003);};
+      if(e===0)tone(lp,root,t,six*5,.36,'sine',.015);if(e===6)tone(lp,root+7,t,six*5,.3,'sine',.015);if(e===10&&R()<.5)tone(lp,root+7,t,six*3,.24,'sine',.015);
+      if([0,3,6,10,12].includes(e))ch.forEach((m,i)=>pluck(m,t+i*.012,.06));
+      if((bar%2===0?[0,3,6,10,12]:[2,4,8,11,14]).includes(e))burst(lp,t,.03,2600,4,.06,.001);
+      burst(lp,t,.06,9000,1,e%2?.012:.022,.01,'highpass');if(e%4===2&&R()<.35)pluck(MEL[Math.floor(R()*MEL.length)],t,.07);}},
+    {len:60/64,bar:4,lp:4200,wet:.38,play(n,t){const beat=60/64;if(n%4)return;const PROG=[[48,[64,67,71,74]],[45,[60,64,67,72]],[41,[57,60,64,69]],[43,[59,62,67,71]],[40,[59,64,67,71]],[45,[60,64,69,72]],[38,[57,62,65,69]],[43,[55,59,62,65]]],[root,ch]=PROG[Math.floor(n/4)%8],MEL=[72,74,76,79,81,83,84,86];
+      const pno=(m,tt,p,d)=>{tone(lp,m,tt,d,p,'sine',.006);tone(lp,m+12,tt,d*.5,p*.22,'sine',.004);tone(lp,m+19,tt,d*.25,p*.06,'sine',.003);};
+      pno(root-12,t,.11,4.5);pno(root,t,.07,4);[0,1,2,3,2,1].forEach((k,i)=>pno(ch[k],t+i*beat*.66,.05+R()*.015,2.6));
+      for(let j=0;j<3;j++)if(R()<.55)pno(MEL[Math.floor(R()*8)],t+beat*(.5+j*1.2+R()*.3),.075,3);}},
+    {len:60/84/2,bar:16,lp:3000,wet:.18,play(n,t){const beat=60/84,e=n%16,PROG=[[45,[60,64,67,71]],[41,[57,60,64,67]],[38,[57,60,62,65]],[40,[56,59,62,64]]],[root,ch]=PROG[Math.floor(n/16)%4],tt=t+(e%2?beat*.11:0);
+      if(e===0||e===7||e===10)kick(tt,.6);if(e===4||e===12){burst(lp,tt,.28,1500,.5,.2,.004);tone(lp,57,tt,.12,.08,'triangle',.002);}
+      burst(lp,tt,.04,8000,1,e%2?.02:.04,.002,'highpass');
+      if(e===0)for(const m of ch){tone(trem,m,tt,beat*7.5,.045,'sine',.03,0,.6);tone(trem,m,tt,beat*7.5,.012,'triangle',.03,8,.6);}
+      if(e===0)tone(lp,root-12,tt,beat*3,.45,'sine',.02);if(e===10)tone(lp,root-5,tt,beat*2,.38,'sine',.02);
+      if(R()<.5)burst(lp,t+R()*.3,.006,2000+R()*5000,1,.03+R()*.03,.001);if(e===14&&R()<.5)tone(lp,ch[3]+12,tt,beat*1.5,.04,'sine',.01);}}
+  ];
+  const st={t:ac.currentTime+.15,n:0,style:cafeStyle,since:ac.currentTime};
+  const useStyle=k=>{const S=STY[k];lp.frequency.setTargetAtTime(S.lp,ac.currentTime,.3);wet.gain.setTargetAtTime(S.wet,ac.currentTime,.3);};
+  useStyle(st.style);syncCafeNow();
   const sched=()=>{
     if(ac.state!=='running')return;const now=ac.currentTime;
     if(st.t<now-1)st.t=now+.1;
     while(st.t<now+1.2){
-      const e=st.step%8,[root,ch]=PROG[Math.floor(st.step/8)%PROG.length],t=st.t+(e%2?beat*.09:0);
-      if(e===0||(e===5&&R()<.6))kick(t);
-      if(e===2||e===6)burst(lp,t,.24,1700,.6,.09,.006);
-      burst(lp,t,.045,7600,1,e%2?.018:.03,.002,'highpass');
-      if(e===0)bass(root,t,beat*1.7);else if(e===4)bass(root+7,t,beat*1.5);else if(e===7&&R()<.7)bass(root+(R()<.5?5:10),t,beat*.45);
-      if(e===0)for(const m of ch)ep(m,t,beat*1.9,.05);
-      if(e===3&&R()<.75)for(const m of ch)ep(m,t,beat*1.1,.036);
-      if((e===1||e===5||e===6)&&R()<.33)ep(MEL[Math.floor(R()*MEL.length)],t,beat*1.3,.045);
-      if(R()<.1)burst(lp,t+R()*.2,.008,2500+R()*3500,1,.025,.001);
-      st.t+=beat/2;st.step++;
+      const S=STY[st.style];
+      if(st.n%S.bar===0&&(cafeSkip||now-st.since>180)){cafeSkip=false;st.style=(st.style+1)%STY.length;cafeStyle=st.style;st.n=0;st.since=now;st.t+=.6;useStyle(st.style);syncCafeNow();continue;}
+      S.play(st.n,st.t);st.t+=S.len;st.n++;
     }
   };
-  sched();return {src:[wow],timers:[setInterval(sched,200)]};
+  sched();return {src:[lfo],timers:[setInterval(sched,200)]};
 };
 const CHORDS=[[48,55,64,67,71],[45,52,60,64,67],[41,48,57,60,64],[43,50,59,62,67]];
 const PENTA=[72,74,76,79,81,84,86,88];
 const mtof=m=>440*Math.pow(2,(m-69)/12);
+function syncCafeNow(){const el=$('cafeNow');if(!el)return;el.hidden=!(inCafe&&snd.master&&snd.cafebgm.on);$('cafeNowTxt').textContent=CAFE_STYLES[cafeStyle];}
 function startLayer(k){
   noise();const out=ac.createGain(),t=ac.currentTime;
   out.gain.setValueAtTime(0,t);out.gain.linearRampToValueAtTime(1,t+1.2);out.connect(bus[k]);
@@ -1630,7 +1657,7 @@ function frame(nowMs){
   }
   updateCamera(dt);
   {const cx=me.seat?me.seat.cx:me.x,cy=me.seat?me.seat.cy:me.y,now=cx>=CAFE.x0*TS-4&&cx<=(CAFE.x1+1)*TS&&cy>=CAFE.y0*TS-6&&cy<=(CAFE.y1+1)*TS;
-   if(now!==inCafe){inCafe=now;if(now){ensureAudio();if(snd.master&&snd.cafebgm.on)toast('☕ 카페에 왔어요. 잔잔한 카페 음악이 흘러나와요.',2600);}applySound();}}
+   if(now!==inCafe){inCafe=now;if(now){ensureAudio();if(snd.master&&snd.cafebgm.on)toast(`☕ 카페에 왔어요. 지금 흐르는 곡: ${CAFE_STYLES[cafeStyle]}`,2600);}applySound();syncCafeNow();}}
 
   // world
   const S=zoom*dpr;
@@ -2183,6 +2210,7 @@ function start(data){
   requestAnimationFrame(t=>{lastT=t;frame(t);});
   connectRoom();
 }
+$('cafeNext').addEventListener('click',()=>{ensureAudio();if(layers.cafebgm){cafeSkip=true;}else{cafeStyle=(cafeStyle+1)%CAFE_STYLES.length;syncCafeNow();}toast(`♪ 다음 곡으로 넘어가요`,1500);});
 start(resume||{});
 // seat card: swipe down to shrink, swipe up or tap to open
 (()=>{
