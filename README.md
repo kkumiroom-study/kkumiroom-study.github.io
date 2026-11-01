@@ -6,7 +6,7 @@ Tools for the "every 2 days" personal-vlog videos of kumiroom.com (꿈이룸). T
 - **Personal vlog, not an ad.** One real-feeling person narrates their own day in the first person ("새로운 목표가 생겨서 온라인 도서실에 와봤어요…"). No slogans, no "지금 가입하세요", no "연출된 예시" label. At most a small `kumiroom.com` at the very end.
 - **Every video uses a different concept and shows different features.** Pick the next unused concept in `concepts.md`, then add it to the log at the bottom of that file.
 - 9:16 vertical, 1080×1920, 24 fps, about 35–50 s. Handwritten-style captions (Gaegu font) that match the narration word timings. A small date sticker in the corner, little paper stickers for key moments.
-- **Sound:** ElevenLabs narration (Korean, eleven_v4, a voice that fits the person; vary voices between videos). The campfire is crackles only: use `fire.py`. **Never** add noise beds that sound like wind or crinkly paper. The owner was very upset about this twice. Music is soft and low, under the voice (sidechain-ducked).
+- **Sound:** ElevenLabs narration (Korean, eleven_v4, a voice that fits the person; vary voices between videos). The campfire must be exactly the site's campfire: use `fire.js`. **Never** redesign it, never add noise beds that sound like wind. The owner was upset when it changed: keep the sound they like. Music is soft and low, under the voice (sidechain-ducked).
 - **On screen:** only MY nickname is visible, never other people's names. No bottom-left joystick circle. Characters face the camera when it matters, so the camera goes on the tree side to show faces. Goals float above heads. Hide the top HUD counters, because the counts are fake in a local room.
 - Do not change the website from this task. If you find a site bug, mention it in the report instead.
 
@@ -41,7 +41,7 @@ Tools for the "every 2 days" personal-vlog videos of kumiroom.com (꿈이룸). T
 
    Fix and repeat.
 6. Full frames: `DUR=44 node rec.js /tmp/vlogwork/frames` takes about 6–7 min for 44 s. Run it in the background and never start a second recorder into the same folder.
-7. Audio: `python3 fire.py fire.wav 60`, then mix like `examples/toeic/mix.sh`: voice + fire + low music, with café music only while at the café.
+7. Audio: `node fire.js fire.wav 60`, then mix like `examples/toeic/mix.sh`: voice + fire + low music, with café music only while at the café.
 8. Encode: `ffmpeg -framerate 24 -i frames/f%04d.jpg -i mix.wav -c:v libx264 -crf 19 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest -movflags +faststart out.mp4`
 9. Make a final contact sheet, check it, and send the mp4 to the owner with a short Korean summary: concept, features shown, narration text.
 
