@@ -1491,11 +1491,19 @@ const LAYERS={
     return {src,timers};
   },
   fire(out){
-    const src=[];
-    const crackle=()=>{const t=ac.currentTime;for(let n=R()<.55?1+Math.floor(R()*3):0;n>0;n--)burst(out,t+R()*.09,.006+R()*.02,1800+R()*5500,1.3,.08+R()*.26,.001);
-      if(R()<.12)burst(out,t+R()*.05,.03,600+R()*500,2,.12+R()*.1,.002);};
-    const pop=()=>{const t=ac.currentTime+R()*.5;if(R()<.18){burst(out,t,.06,900+R()*1400,1.5,.3+R()*.15,.002);for(let n=2+Math.floor(R()*5);n>0;n--)burst(out,t+.03+R()*.35,.01+R()*.02,3000+R()*4500,1.2,.05+R()*.12,.001);}};
-    return {src,timers:[setInterval(crackle,80),setInterval(pop,650)]};
+    // campfire = only dry wood crackles: very short clicks and pops written straight into a loop, no noise bed at all (nothing that can sound like wind)
+    const sr=ac.sampleRate,secs=13,len=Math.round(sr*secs),bf=ac.createBuffer(2,len,sr),L=bf.getChannelData(0),Rt=bf.getChannelData(1);
+    const click=(t,a,ms,pan)=>{const i0=Math.round(t*sr),n=Math.max(8,Math.round(ms*sr/1000));let prev=0;
+      for(let i=0;i<n&&i0+i<len;i++){const w=(Math.random()*2-1)*Math.exp(-i/(n*.28)),v=(w-prev)*a;prev=w;L[i0+i]+=v*(1-pan*.5);Rt[i0+i]+=v*(1+pan*.5);}};
+    let t=.02;
+    while(t<secs-.08){t+=-Math.log(1-Math.random())/7.5;const r=Math.random(),pan=Math.random()*1.6-.8;
+      if(r<.62)click(t,.10+Math.random()*.16,.5+Math.random()*1.4,pan);
+      else if(r<.9)click(t,.25+Math.random()*.25,1+Math.random()*2,pan);
+      else{click(t,.45+Math.random()*.3,2+Math.random()*2.5,pan);for(let k=2+Math.floor(Math.random()*4),tt=t;k>0;k--){tt+=.012+Math.random()*.06;if(tt<secs-.02)click(tt,.08+Math.random()*.15,.4+Math.random()*.9,pan);}}}
+    // fade the loop seam
+    for(let i=0;i<400;i++){const g=i/400;L[i]*=g;Rt[i]*=g;L[len-1-i]*=g;Rt[len-1-i]*=g;}
+    const src=[loop(bf,filt('highpass',650),filt('lowpass',9000),amp(1.1),out)];
+    return {src,timers:[]};
   },
   white(out){return {src:[loop(NB.white,filt('lowpass',9000),amp(.45),out)],timers:[]};},
   birds(out){
