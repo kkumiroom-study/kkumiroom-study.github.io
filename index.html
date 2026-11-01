@@ -283,6 +283,8 @@ body.on-lunch .lc-x{display:none}
 .is-seated .mood-btn{top:auto;bottom:calc(var(--dock-h,0px) + 34px)}
 .is-seated .joy~.mood-btn{left:max(16px,env(safe-area-inset-left,0px))}
 #joy,.joy{display:none!important}
+.stop-walk{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(196px + env(safe-area-inset-bottom,0px));z-index:7;border:1px solid rgba(255,220,180,.35);border-radius:999px;padding:12px 22px;background:rgba(28,22,44,.82);color:#ffe7c2;font:700 16px "IBM Plex Sans KR",system-ui,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.4);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);cursor:pointer}
+.stop-walk[hidden]{display:none}
 .pp-btns button.hot{background:#ffb3c4;color:#4a1a2a}
 .chat-btn{position:fixed;z-index:5;left:max(16px,env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;font-size:21px;display:grid;place-items:center;cursor:pointer;color:var(--paper);padding:0}
 .is-seated .chat-btn{top:auto;transform:none;bottom:calc(var(--dock-h,0px) + 34px)}
@@ -432,6 +434,7 @@ body.on-lunch .lc-x{display:none}
       <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v9h10"/><path d="M6 12h12v3H6z"/><path d="M8 15v6M16 15v6"/></svg></span>
       <span><b>자리잡기</b><small>가까운 빈 별빛석으로 걸어가 앉아요</small></span>
     </button>
+    <button id="stopWalk" class="stop-walk" type="button" hidden aria-label="걷기 멈추기">⏸ 멈추기</button>
     <div id="goingBar" class="going glass" hidden>
       <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span id="goingTxt">이동 중</span>
@@ -2016,6 +2019,7 @@ function astar(sx,sz,tx,tz){
   return out;
 }
 const pathLen=(x,z,pts)=>{let L=0,px=x,pz=z;for(const p of pts){L+=Math.hypot(p.x-px,p.z-pz);px=p.x;pz=p.z;}return L;};
+function stopWalk3(){const was=path3.length||pend3;path3=[];pend3=null;goal3=null;mySpeed=0;if(crun)cancelRun('커피 사오기를 그만뒀어요.');if(T3&&T3.mk)T3.mk.material.opacity=0;if(was)toast('멈췄어요',1200);}
 function walkTo3(x,z){if(!free3(x,z)){const c=nearestFree(...cellOf(x,z));if(c)[x,z]=cellXZ(...c);}path3=astar(me3.x,me3.z,x,z);goal3={x,z};}
 function goSeat3(id){const s3=SEAT3D.get(id);pend3=id;const ax=s3.x+Math.sin(s3.face)*.65,az=s3.z+Math.cos(s3.face)*.65;path3=astar(me3.x,me3.z,ax,az);goal3={x:ax,z:az};}
 function marker3(pt){if(!T3)return;T3.mk.position.set(pt.x,.02,pt.z);T3.mk.material.opacity=.9;}
@@ -2062,6 +2066,7 @@ function render3d(t){
   if(!wasSeat&&me.seat){camOff=0;}
   wasSeat=me.seat?me.seat.id:null;
   const moving=step3(dt);stepWander(dt);coffeeRunTick();
+  {const sw=!me.seat&&(path3.length>0||!!pend3);if(sw!==!!frame.sw){frame.sw=sw;$('stopWalk').hidden=!sw;}}
   {const [x2,y2]=to2d(me3.x,me3.z);me.x=x2;me.y=y2;me.moving=moving;const a=me3.ry;me.dir=Math.abs(Math.sin(a))>Math.abs(Math.cos(a))?(Math.sin(a)<0?'right':'left'):(Math.cos(a)<0?'down':'up');}
   if(T3.mk.material.opacity>0)T3.mk.material.opacity=Math.max(0,T3.mk.material.opacity-dt*.9);
   if(!T3.glowT||t-T3.glowT>.4){T3.glowT=t;for(const [id,g] of T3.freeGlow){const st=seatById.get(id);g.visible=!me.seat&&isSeatFree(st);}}
@@ -2219,7 +2224,7 @@ cvs.addEventListener('pointerdown',e=>{
   if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();
   try{cvs.setPointerCapture(e.pointerId);}catch(_){}
   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(ptrs.size===1)drag={x:e.clientX,y:e.clientY,moved:false};
+  if(ptrs.size===1)drag={x:e.clientX,y:e.clientY,moved:false,t:performance.now()};
   else if(ptrs.size===2){const [p1,p2]=[...ptrs.values()];pinch={d:Math.hypot(p1.x-p2.x,p1.y-p2.y)||1,z:viewZoom};if(drag)drag.moved=true;}
 });
 cvs.addEventListener('pointermove',e=>{
@@ -2233,7 +2238,7 @@ cvs.addEventListener('pointermove',e=>{
 const endPtr=e=>{
   if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(ptrs.size<2)pinch=null;
-  if(ptrs.size===0){const d=drag;drag=null;dragging=false;if(e.type==='pointerup'&&d&&!d.moved)handleTap(e.clientX,e.clientY);}
+  if(ptrs.size===0){const d=drag;drag=null;dragging=false;if(e.type==='pointerup'&&d&&!d.moved&&performance.now()-d.t<450)handleTap(e.clientX,e.clientY);}
 };
 cvs.addEventListener('pointerup',endPtr);cvs.addEventListener('pointercancel',endPtr);
 cvs.addEventListener('wheel',e=>{e.preventDefault();setViewZoom(viewZoom*Math.exp(-e.deltaY*.0015));},{passive:false});
@@ -2698,6 +2703,8 @@ function start(data){
 $('cafeNext').addEventListener('click',()=>{ensureAudio();if(layers.cafebgm){cafeSkip=true;}else{cafeStyle=(cafeStyle+1)%CAFE_STYLES.length;syncCafeNow();}toast(`♪ 다음 곡으로 넘어가요`,1500);});
 $('moodBtn').addEventListener('click',()=>setMood(!moodOn()));syncMood();
 $('crBtn').addEventListener('click',startRun);
+$('stopWalk').addEventListener('click',e=>{e.stopPropagation();stopWalk3();});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!me.seat&&(path3.length||pend3))stopWalk3();});
 $('mnPick').addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b||!crun||crun.stage!=='menu')return;crun.drink=b.dataset.d;crun.stage='order';crun.t=Date.now();$('menuCard').hidden=true;const D=DRINKS[crun.drink];toast(`${D.e} 바리스타가 ${D.n}를 만들고 있어요…`,2800);});
 $('mnCancel').addEventListener('click',()=>{if(!crun)return;$('menuCard').hidden=true;crun.stage='order';crun.t=Date.now()-3000;crun.nodrink=true;});
 $('lunchBtn').addEventListener('click',()=>{syncLunch();$('lunchCard').hidden=false;});
