@@ -1491,18 +1491,22 @@ const LAYERS={
     return {src,timers};
   },
   fire(out){
-    // campfire = only dry wood crackles: very short clicks and pops written straight into a loop, no noise bed at all (nothing that can sound like wind)
-    const sr=ac.sampleRate,secs=13,len=Math.round(sr*secs),bf=ac.createBuffer(2,len,sr),L=bf.getChannelData(0),Rt=bf.getChannelData(1);
-    const click=(t,a,ms,pan)=>{const i0=Math.round(t*sr),n=Math.max(8,Math.round(ms*sr/1000));let prev=0;
-      for(let i=0;i<n&&i0+i<len;i++){const w=(Math.random()*2-1)*Math.exp(-i/(n*.28)),v=(w-prev)*a;prev=w;L[i0+i]+=v*(1-pan*.5);Rt[i0+i]+=v*(1+pan*.5);}};
-    let t=.02;
-    while(t<secs-.08){t+=-Math.log(1-Math.random())/7.5;const r=Math.random(),pan=Math.random()*1.6-.8;
-      if(r<.62)click(t,.10+Math.random()*.16,.5+Math.random()*1.4,pan);
-      else if(r<.9)click(t,.25+Math.random()*.25,1+Math.random()*2,pan);
-      else{click(t,.45+Math.random()*.3,2+Math.random()*2.5,pan);for(let k=2+Math.floor(Math.random()*4),tt=t;k>0;k--){tt+=.012+Math.random()*.06;if(tt<secs-.02)click(tt,.08+Math.random()*.15,.4+Math.random()*.9,pan);}}}
-    // fade the loop seam
-    for(let i=0;i<400;i++){const g=i/400;L[i]*=g;Rt[i]*=g;L[len-1-i]*=g;Rt[len-1-i]*=g;}
-    const src=[loop(bf,filt('highpass',650),filt('lowpass',9000),amp(1.1),out)];
+    // campfire: burning wood knocks and pops (each one a tiny ringing "tok"/"pak" with a woody body), coming in irregular little flurries.
+    // no continuous noise at all, so nothing can sound like wind or crinkly paper.
+    const sr=ac.sampleRate,secs=16,len=Math.round(sr*secs),bf=ac.createBuffer(2,len,sr),L=bf.getChannelData(0),Rt=bf.getChannelData(1),tmp=new Float32Array(Math.round(sr*.4));
+    const ev=(t,f,tau,a,pan)=>{const i0=Math.round(t*sr);if(i0>=len)return;const n=Math.min(len-i0,tmp.length,Math.round(tau*sr*7)),r=Math.exp(-1/(tau*sr)),c=2*r*Math.cos(2*Math.PI*f/sr),r2=r*r,ex=Math.max(3,Math.round(sr*(.00015+Math.random()*.0005)));
+      let y1=0,y2=0,pk=1e-9;for(let i=0;i<n;i++){const x=i<ex?(Math.random()*2-1):0,y=c*y1-r2*y2+x;y2=y1;y1=y;tmp[i]=y;const q=Math.abs(y);if(q>pk)pk=q;}
+      const fade=Math.min(n,64);for(let i=0;i<n;i++){const v=tmp[i]/pk*a*(i>n-fade?(n-i)/fade:1);L[i0+i]+=v*(1-pan*.4);Rt[i0+i]+=v*(1+pan*.4);}};
+    const one=(t,small)=>{const r=Math.random(),pan=Math.random()*1.4-.7;
+      if(small||r<.5)ev(t,600+Math.random()*1000,.004+Math.random()*.005,(small?.12:.22)+Math.random()*.2,pan);
+      else if(r<.78)ev(t,1700+Math.random()*1400,.0015+Math.random()*.002,.15+Math.random()*.18,pan);
+      else if(r<.97)ev(t,230+Math.random()*300,.012+Math.random()*.014,.45+Math.random()*.3,pan);
+      else ev(t,75+Math.random()*45,.045+Math.random()*.02,.4,pan);};
+    let t=.05;
+    while(t<secs-.6){t+=-Math.log(1-Math.random())/4.2;one(t,false);
+      if(Math.random()<.13){let tt=t;for(let k=5+Math.floor(Math.random()*9);k>0;k--){tt+=.02+Math.random()*.06;one(tt,true);}}}
+    for(let i=0;i<600;i++){const g=i/600;L[i]*=g;Rt[i]*=g;L[len-1-i]*=g;Rt[len-1-i]*=g;}
+    const src=[loop(bf,filt('highpass',90),filt('lowpass',5200),amp(.95),out)];
     return {src,timers:[]};
   },
   white(out){return {src:[loop(NB.white,filt('lowpass',9000),amp(.45),out)],timers:[]};},
@@ -2746,6 +2750,42 @@ $('todoForm').addEventListener('submit',e=>{e.preventDefault();const v=cleanText
 renderTodo();
 window.__kkStarted=true;
 
+// 카톡·인스타 등 앱 안 브라우저로 들어오면 외부 브라우저로 열지 물어봐요
+(()=>{
+  const ua=navigator.userAgent;
+  const kakao=/KAKAOTALK/i.test(ua),line=/Line\//i.test(ua);
+  const inApp=kakao||line||/Instagram|FBAN|FBAV|FB_IAB|NAVER\(inapp|NAVER|DaumApps|everytimeApp|Whale\/.*Inapp|; wv\)|BAND\/|SamsungBrowser\/.*CrossApp|Twitter|TikTok|musical_ly|Bytedance|Snapchat|Threads/i.test(ua);
+  if(!inApp)return;
+  try{if(sessionStorage.getItem('kkum.stayInApp'))return;}catch(e){}
+  const ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1),android=/Android/i.test(ua);
+  const url=location.href;
+  const wrap=document.createElement('div');
+  wrap.setAttribute('role','dialog');wrap.setAttribute('aria-modal','true');wrap.setAttribute('aria-labelledby','oxT');
+  wrap.style.cssText='position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;background:rgba(8,6,18,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font-family:"IBM Plex Sans KR",system-ui,sans-serif';
+  wrap.innerHTML='<div style="width:min(360px,100%);background:#1d1830;border:1px solid rgba(255,220,170,.22);border-radius:22px;padding:24px 20px 18px;color:#f6eee2;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.5)">'
+   +'<div style="font-size:34px;line-height:1">🌙</div>'
+   +'<h2 id="oxT" style="margin:10px 0 6px;font-size:19px">외부 브라우저로 열까요?</h2>'
+   +'<p id="oxP" style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#d9cdb8">앱 안의 브라우저에서는 소리가 끊기거나<br>화면이 느릴 수 있어요. 크롬·사파리에서 열면<br>꿈이룸을 더 편하게 쓸 수 있어요.</p>'
+   +'<button id="oxGo" type="button" style="display:block;width:100%;border:0;border-radius:999px;padding:14px;background:#ffc35a;color:#2b1b04;font-family:inherit;font-weight:700;font-size:16px;cursor:pointer">외부 브라우저로 열기</button>'
+   +'<button id="oxStay" type="button" style="display:block;width:100%;margin-top:8px;border:0;border-radius:999px;padding:12px;background:transparent;color:#d9cdb8;font-family:inherit;font-weight:600;font-size:15px;cursor:pointer">여기서 계속하기</button>'
+   +'</div>';
+  const mount=()=>{document.body.appendChild(wrap);const g=wrap.querySelector('#oxGo');try{g.focus();}catch(e){}};
+  if(document.body)mount();else addEventListener('DOMContentLoaded',mount);
+  const close=()=>{wrap.remove();};
+  wrap.querySelector('#oxStay').onclick=()=>{try{sessionStorage.setItem('kkum.stayInApp','1');}catch(e){}close();};
+  const guide=()=>{
+    const p=wrap.querySelector('#oxP');
+    p.innerHTML=(ios?'오른쪽 아래(또는 위)의 <b>⋯ 메뉴</b>를 누르고<br><b>“Safari로 열기”</b> 또는 <b>“외부 브라우저로 열기”</b>를 눌러 주세요.':'오른쪽 위 <b>⋮ 메뉴</b>를 누르고<br><b>“다른 브라우저로 열기”</b>를 눌러 주세요.')+'<br><span style="font-size:13px;opacity:.8">링크를 복사해 두었어요. 브라우저 주소창에 붙여 넣어도 돼요.</span>';
+    try{navigator.clipboard&&navigator.clipboard.writeText(url);}catch(e){}
+    const g=wrap.querySelector('#oxGo');g.textContent='링크 다시 복사하기';g.onclick=()=>{try{navigator.clipboard&&navigator.clipboard.writeText(url);}catch(e){}g.textContent='복사했어요 ✓';};
+  };
+  wrap.querySelector('#oxGo').onclick=()=>{
+    if(kakao){location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(url);setTimeout(guide,1500);return;}
+    if(line){location.href=url+(url.includes('?')?'&':'?')+'openExternalBrowser=1';return;}
+    if(android){const u=new URL(url);location.href='intent://'+u.host+u.pathname+u.search+u.hash+'#Intent;scheme=https;S.browser_fallback_url='+encodeURIComponent(url)+';end';setTimeout(guide,1500);return;}
+    guide();
+  };
+})();
 // 홈 화면에 추가 안내
 (()=>{
   if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
@@ -2756,7 +2796,7 @@ window.__kkStarted=true;
   const mobile=ios||/Android/i.test(ua);
   const inApp=/KAKAOTALK|Instagram|FBAN|FBAV|NAVER|Line\//i.test(ua);
   let snoozed=0;try{snoozed=+localStorage.getItem('kkum.installNo')||0;}catch(e){}
-  if(standalone||!mobile||Date.now()-snoozed<3*864e5)return;
+  if(standalone||!mobile||inApp||Date.now()-snoozed<3*864e5)return;
   let deferred=null;
   const show=()=>{if(box.hidden){box.hidden=false;}};
   const hide=()=>{box.hidden=true;};
