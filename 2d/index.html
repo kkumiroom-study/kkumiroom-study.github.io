@@ -417,7 +417,7 @@ body:not(.is-seated) .cafe-now{bottom:calc(150px + env(safe-area-inset-bottom,0p
 </div>
 
 <div id="cafeNow" class="cafe-now glass" hidden aria-live="polite"><span>♪ 카페 음악 · <b id="cafeNowTxt">로파이 재즈</b></span><button id="cafeNext" type="button">다음 곡 ⏭</button></div>
-<button id="sndHint" class="snd-hint" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>눌러서 빗소리 켜기</button>
+<button id="sndHint" class="snd-hint" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>눌러서 모닥불 소리 켜기</button>
 <div class="view-ctl" aria-label="화면 보기">
   <button id="zoomIn" class="vbtn glass" aria-label="확대">+</button>
   <button id="zoomOut" class="vbtn glass" aria-label="축소">−</button>
@@ -1243,13 +1243,13 @@ function releaseWake(){try{if(wake)wake.release();}catch(e){}wake=null;}
 // a soft piano-like pad and small effects. Rain is on by default and starts with the first tap,
 // because browsers only allow sound after the viewer touches the page.
 const SOUNDS=[
-  {k:'rain',group:'환경음 · 여러 개를 섞어 들을 수 있어요',title:'빗소리',sub:'창밖에 조용히 내리는 비',on:true,vol:35,gain:1.4,
+  {k:'rain',group:'환경음 · 여러 개를 섞어 들을 수 있어요',title:'빗소리',sub:'창밖에 조용히 내리는 비',on:false,vol:35,gain:1.4,
    icon:'<path d="M7 14a4 4 0 0 1-.5-7.97A5.5 5.5 0 0 1 17.3 6.5 3.75 3.75 0 0 1 17 14H7z"/><path d="M8 17.5l-1 2.5M12 17.5l-1 2.5M16 17.5l-1 2.5"/>'},
   {k:'library',title:'도서실 소리',sub:'책장 넘기는 소리와 연필 소리',on:false,vol:35,gain:1.7,
    icon:'<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/>'},
   {k:'cafe',title:'카페 소리',sub:'낮은 말소리와 잔 부딪히는 소리',on:false,vol:30,gain:1.3,
    icon:'<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.6 1 .6 1.5 0 2.5M12 3.5c-.6 1 .6 1.5 0 2.5"/>'},
-  {k:'fire',title:'모닥불',sub:'타닥타닥 장작 타는 소리',on:false,vol:35,gain:1.6,
+  {k:'fire',title:'모닥불',sub:'타닥타닥 장작 타는 소리',on:true,vol:35,gain:1.6,
    icon:'<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2.2-4.8.2 1.6.9 2.6 1.8 3.1C11 9 11.2 6 12 3z"/><path d="M5 21h14"/>'},
   {k:'white',title:'백색소음',sub:'일정하게 흐르는 쉬 소리',on:false,vol:25,gain:.9,
    icon:'<path d="M3 12c1.5-3 3-3 4.5 0s3 3 4.5 0 3-3 4.5 0 3 3 4.5 0"/><path d="M3 17c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0" opacity=".5"/>'},
@@ -1264,12 +1264,12 @@ const SOUNDS=[
 ];
 const KEYS=SOUNDS.map(x=>x.k),LAYER_KEYS=KEYS.filter(k=>k!=='fx');
 const META=Object.fromEntries(SOUNDS.map(x=>[x.k,x]));
-const snd=(()=>{const o={master:true,bg:false},v=store.get('sound',null);
+const snd=(()=>{const o={master:true,bg:true},v0=store.get('sound',null),v=v0&&v0.v===2?v0:null;
   for(const x of SOUNDS)o[x.k]={on:x.on,vol:x.vol};
   if(v&&typeof v==='object'){if(typeof v.master==='boolean')o.master=v.master;if(typeof v.bg==='boolean')o.bg=v.bg;
     for(const k of KEYS)if(v[k]&&typeof v[k]==='object'){if(typeof v[k].on==='boolean')o[k].on=v[k].on;if(num(v[k].vol)!==null)o[k].vol=clamp(Math.round(v[k].vol),0,100);}}
   return o;})();
-const saveSnd=()=>store.set('sound',snd);
+const saveSnd=()=>store.set('sound',Object.assign({},snd,{v:2}));
 let ac=null,rain=null,busMaster=null,NB=null,inCafe=false;const bus={},layers={};
 function ensureAudio(){
   if(!ac){
@@ -1318,9 +1318,11 @@ function ping(dest,t0,freq,peak,len){
 const R=Math.random;
 const LAYERS={
   rain(out){
-    const src=[loop(NB.pink,filt('highpass',200),filt('lowpass',3400),amp(.75),out)];
-    const tick=()=>{const t=ac.currentTime;for(let n=1+Math.floor(R()*3);n>0;n--)burst(out,t+R()*.25,.05+R()*.05,1800+R()*3600,7,.05+R()*.12,.004);};
-    return {src,timers:[setInterval(tick,250)]};
+    // gentle steady rain: lots of tiny drops, a faint high shimmer, now and then a bigger drip from the eaves (no low whoosh)
+    const src=[loop(NB.white,filt('highpass',5200),filt('lowpass',11000),amp(.045),out)];
+    const drops=()=>{const t=ac.currentTime;for(let n=2+Math.floor(R()*4);n>0;n--)burst(out,t+R()*.06,.012+R()*.03,2600+R()*5200,4+R()*4,.025+R()*.05,.0015);};
+    const drip=()=>{const t=ac.currentTime+R()*.5;if(R()<.35){const f=900+R()*700;burst(out,t,.05,f,9,.07+R()*.05,.002);burst(out,t+.012,.08,f*1.9,12,.03,.003);}};
+    return {src,timers:[setInterval(drops,60),setInterval(drip,900)]};
   },
   library(out){
     const src=[loop(NB.brown,filt('lowpass',380),amp(.32),out),loop(NB.pink,filt('bandpass',140,.7),amp(.07),out)];
@@ -1333,25 +1335,41 @@ const LAYERS={
     return {src,timers:[setInterval(tick,700)]};
   },
   cafe(out){
-    const src=[loop(NB.brown,filt('lowpass',650),amp(.36),out)];
-    const bands=[[330,.45],[650,.55],[1250,.38],[2300,.16]].map(([f,base])=>{const g=amp(base);src.push(loop(NB.pink,filt('bandpass',f,1.4),g,out));return {g,base};});
-    const chatter=()=>{const t=ac.currentTime;for(const b of bands)b.g.gain.setTargetAtTime(b.base*(.3+.7*R()),t,.07);};
-    const tick=()=>{
-      const t=ac.currentTime+R()*.4;
-      if(R()<.12)ping(out,t,2100+R()*1900,.05+R()*.05,.7);
-      if(R()<.04){const n=3+Math.floor(R()*4);for(let i=0;i<n;i++)ping(out,t+i*(.13+R()*.06),2600+R()*600,.03,.35);}
-      if(R()<.02){const s=ac.createBufferSource(),g=ac.createGain();s.buffer=NB.pink;s.loop=true;s.connect(filt('highpass',2800)).connect(g).connect(out);
-        g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.12,t+1);g.gain.setValueAtTime(.12,t+2.4);g.gain.exponentialRampToValueAtTime(.0001,t+3.4);s.start(t);s.stop(t+3.5);}
-    };
-    return {src,timers:[setInterval(chatter,120),setInterval(tick,600)]};
+    // distant murmur of people talking (voice-like buzz through moving vowel formants), cups and spoons; no hissing noise
+    const room=filt('lowpass',2200),src=[],timers=[];room.connect(out);
+    const voices=[];
+    for(let i=0;i<6;i++){
+      const o=ac.createOscillator();o.type='sawtooth';const base=i%2?105+R()*40:190+R()*60;o.frequency.value=base;
+      const f1=filt('bandpass',600,5),f2=filt('bandpass',1300,7),g1=amp(1),g2=amp(.55),env=amp(0),pan=ac.createStereoPanner?ac.createStereoPanner():null;
+      o.connect(f1);o.connect(f2);f1.connect(g1);f2.connect(g2);g1.connect(env);g2.connect(env);
+      if(pan){pan.pan.value=(R()-.5)*1.4;env.connect(pan);pan.connect(room);}else env.connect(room);
+      o.start();src.push(o);voices.push({o,f1,f2,env,base,talk:R()<.6,next:0,lvl:.012+R()*.012});
+    }
+    const V=[[300,2300],[600,1200],[800,1300],[450,900],[350,1900],[650,1700]];
+    const syl=()=>{const t=ac.currentTime;
+      for(const v of voices){
+        if(t<v.next)continue;
+        if(R()<.06)v.talk=!v.talk;
+        if(!v.talk){v.env.gain.setTargetAtTime(0,t,.08);v.next=t+.4+R()*1.2;continue;}
+        const d=.11+R()*.16,[a,b]=V[Math.floor(R()*V.length)];
+        v.f1.frequency.setTargetAtTime(a,t,.03);v.f2.frequency.setTargetAtTime(b,t,.03);
+        v.o.frequency.setTargetAtTime(v.base*(.9+R()*.25),t,.06);
+        const lv=R()<.15?0:v.lvl*(.6+R()*.6);v.env.gain.setTargetAtTime(lv,t,.025);v.env.gain.setTargetAtTime(lv*.3,t+d*.7,.04);
+        v.next=t+d;
+      }};
+    const clink=()=>{const t=ac.currentTime+R()*.4;
+      if(R()<.16)ping(out,t,2200+R()*1800,.05+R()*.05,.7);
+      if(R()<.05){const n=3+Math.floor(R()*4);for(let i=0;i<n;i++)ping(out,t+i*(.13+R()*.06),2600+R()*600,.03,.35);}
+      if(R()<.04)burst(out,t,.05,1200+R()*600,3,.08,.004);};
+    timers.push(setInterval(syl,45),setInterval(clink,600));
+    return {src,timers};
   },
   fire(out){
-    const flick=amp(.06);
-    const src=[loop(NB.brown,filt('lowpass',480),amp(.34),out),loop(NB.pink,filt('bandpass',850,.6),flick,out)];
-    const flicker=()=>flick.gain.setTargetAtTime(.03+.07*R(),ac.currentTime,.15);
-    const crackle=()=>{const t=ac.currentTime;if(R()<.4)burst(out,t+R()*.09,.008+R()*.02,2500+R()*5000,1.2,.06+R()*.22,.001);};
+    const src=[];
+    const crackle=()=>{const t=ac.currentTime;for(let n=R()<.55?1+Math.floor(R()*3):0;n>0;n--)burst(out,t+R()*.09,.006+R()*.02,1800+R()*5500,1.3,.08+R()*.26,.001);
+      if(R()<.12)burst(out,t+R()*.05,.03,600+R()*500,2,.12+R()*.1,.002);};
     const pop=()=>{const t=ac.currentTime+R()*.5;if(R()<.18){burst(out,t,.06,900+R()*1400,1.5,.3+R()*.15,.002);for(let n=2+Math.floor(R()*5);n>0;n--)burst(out,t+.03+R()*.35,.01+R()*.02,3000+R()*4500,1.2,.05+R()*.12,.001);}};
-    return {src,timers:[setInterval(flicker,200),setInterval(crackle,90),setInterval(pop,700)]};
+    return {src,timers:[setInterval(crackle,80),setInterval(pop,650)]};
   },
   white(out){return {src:[loop(NB.white,filt('lowpass',9000),amp(.45),out)],timers:[]};},
   birds(out){
