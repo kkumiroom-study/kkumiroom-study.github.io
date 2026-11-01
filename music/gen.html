@@ -1,0 +1,106 @@
+<!doctype html><meta charset="utf-8"><script>
+const R=(()=>{let s=12345;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};})();
+function kit(ctx){
+  const sr=ctx.sampleRate,nb=ctx.createBuffer(1,sr*2,sr),d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  const filt=(t,f,q)=>{const x=ctx.createBiquadFilter();x.type=t;x.frequency.value=f;if(q)x.Q.value=q;return x;};
+  const amp=v=>{const g=ctx.createGain();g.gain.value=v;return g;};
+  const burst=(dest,t0,dur,f,q,peak,att,type)=>{const s=ctx.createBufferSource(),fl=filt(type||'bandpass',f,q),g=ctx.createGain();s.buffer=nb;g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(peak,t0+(att||.005));g.gain.exponentialRampToValueAtTime(.0001,t0+dur);s.connect(fl).connect(g).connect(dest);s.start(t0,Math.random());s.stop(t0+dur+.05);};
+  const mtof=m=>440*Math.pow(2,(m-69)/12);
+  const tone=(dest,m,t0,dur,peak,type,att,det,sus)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.type=type||'sine';o.frequency.value=mtof(m);if(det)o.detune.value=det;g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(peak,t0+(att||.01));if(sus)g.gain.exponentialRampToValueAtTime(peak*sus,t0+(att||.01)+.35);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);o.connect(g).connect(dest);o.start(t0);o.stop(t0+dur+.05);return o;};
+  const verb=(sec,decay)=>{const c=ctx.createConvolver(),n=sr*sec,b=ctx.createBuffer(2,n,sr);for(let ch=0;ch<2;ch++){const x=b.getChannelData(ch);for(let i=0;i<n;i++)x[i]=(Math.random()*2-1)*Math.pow(1-i/n,decay);}c.buffer=b;return c;};
+  const kick=(dest,t0,pk)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(110,t0);o.frequency.exponentialRampToValueAtTime(42,t0+.2);g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(pk,t0+.004);g.gain.exponentialRampToValueAtTime(.0001,t0+.34);o.connect(g).connect(dest);o.start(t0);o.stop(t0+.38);};
+  return {filt,amp,burst,mtof,tone,verb,kick};
+}
+// shared bus: lowpass -> (dry + reverb) -> compressor -> master with fades
+function bus(ctx,K,dur,lpHz,wet){
+  const lp=K.filt('lowpass',lpHz),comp=ctx.createDynamicsCompressor(),m=ctx.createGain(),rv=K.verb(2.6,3),wg=K.amp(wet);
+  lp.connect(comp);lp.connect(rv);rv.connect(wg);wg.connect(comp);comp.connect(m);m.connect(ctx.destination);
+  m.gain.setValueAtTime(0,0);m.gain.linearRampToValueAtTime(1,1.5);m.gain.setValueAtTime(1,dur-3);m.gain.linearRampToValueAtTime(0,dur);
+  return lp;
+}
+const SONGS={
+  promo(ctx,dur){SONGS.jazz(ctx,dur);const K=kit(ctx),sr=ctx.sampleRate,master=ctx.createGain();master.connect(ctx.destination);
+    master.gain.setValueAtTime(0,0);master.gain.linearRampToValueAtTime(1,1.2);master.gain.setValueAtTime(1,dur-2.5);master.gain.linearRampToValueAtTime(0,dur);
+    const nb=ctx.createBuffer(1,sr*4,sr),d=nb.getChannelData(0);let last=0;for(let i=0;i<d.length;i++){const x=Math.random()*2-1;last=(last+.02*x)/1.02;d[i]=last*3.5;}
+    const wb=ctx.createBuffer(1,sr*4,sr),w=wb.getChannelData(0);for(let i=0;i<w.length;i++)w[i]=Math.random()*2-1;
+    const loop=(buf,f,g)=>{const s2=ctx.createBufferSource();s2.buffer=buf;s2.loop=true;const fl=K.filt('lowpass',f),gg=K.amp(g);s2.connect(fl).connect(gg).connect(master);s2.start(0);};
+    loop(nb,480,.22);loop(wb,5200,.022);
+    for(let t=.1;t<dur;t+=.06+Math.random()*.12)if(Math.random()<.45)K.burst(master,t,.01+Math.random()*.02,2500+Math.random()*5000,1.2,.05+Math.random()*.16,.001);
+    for(let t=.3;t<dur;t+=.5+Math.random()*1.1)if(Math.random()<.25)K.burst(master,t,.06,900+Math.random()*1400,1.5,.18,.002);
+    const ping=(t,f,p)=>{for(const [m,a] of [[1,1],[2,.35],[3,.12]])K.tone(master,0,t,1.2/m,p*a,'sine',.004);};
+    const bell=(t,fs,p)=>fs.forEach((f,i)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=f;g.gain.setValueAtTime(.0001,t+i*.12);g.gain.exponentialRampToValueAtTime(p,t+i*.12+.01);g.gain.exponentialRampToValueAtTime(.0001,t+i*.12+1.1);o.connect(g).connect(master);o.start(t+i*.12);o.stop(t+i*.12+1.2);});
+    bell(7.0,[880,1174.7],.12);bell(8.4,[880,1174.7],.12);bell(9.8,[1046.5,1318.5,1568],.1);bell(10.9,[1046.5,1318.5,1568,2093],.11);
+    for(let i=0;i<14;i++)K.burst(master,11.6+i*.07+Math.random()*.04,.05,1800+Math.random()*1500,.8,.12,.003);
+    bell(15.0,[659.3,830.6,987.8],.1);bell(16.4,[659.3,830.6,987.8],.09);bell(22.4,[523.3,659.3,784,1046.5],.1);
+  },
+  // 5. dawn felt piano: slow, soft, wide room, a little theme that comes back with small changes
+  dawn(ctx,dur){const K=kit(ctx),beat=60/56;
+    const lp=K.filt('lowpass',1700),comp=ctx.createDynamicsCompressor(),m=ctx.createGain(),rv=K.verb(4.2,2.6),wg=K.amp(.5);
+    lp.connect(comp);lp.connect(rv);rv.connect(wg);wg.connect(comp);comp.connect(m);m.connect(ctx.destination);
+    m.gain.setValueAtTime(0,0);m.gain.linearRampToValueAtTime(1,2);m.gain.setValueAtTime(1,dur-4);m.gain.linearRampToValueAtTime(0,dur);
+    const felt=(n,t,p,d)=>{K.tone(lp,n,t,d,p,'sine',.028);K.tone(lp,n+12,t,d*.45,p*.16,'sine',.02);K.tone(lp,n,t,d*.3,p*.08,'triangle',.02);K.burst(lp,t,.05,900,.8,p*.12,.004);};
+    const PROG=[[45,[57,60,64,71]],[41,[53,57,60,64]],[48,[55,60,62,64]],[43,[55,60,62,67]],[40,[55,59,62,64]],[41,[57,60,64,67]],[38,[57,60,64,65]],[40,[56,59,64,68]]];
+    const MELO=[[[1,76],[2,74],[3,72]],[[0,72],[1.5,69],[3,67]],[[1,67],[2,72],[2.5,74],[3,76]],[[0,74],[2,71]],[[1,71],[2,72],[3,74]],[[0,76],[1.5,77],[2.5,76],[3,72]],[[0,74],[2,69]],[[0,68],[2,71],[3,76]]];
+    for(let bar=0,t=.4;t<dur-2;bar++,t+=beat*4){const [root,ch]=PROG[bar%8],pass=Math.floor(bar/8);
+      felt(root-12,t,.13,6);felt(root-5,t+.02,.07,5.5);
+      [[.5,0],[1.5,1],[2.5,2],[3.25,3]].forEach(([b,k])=>{if(R()<.85)felt(ch[k],t+b*beat+(R()-.5)*.03,.045+R()*.012,4);});
+      if(bar%8>=0&&(pass>0||bar>=2))for(const [b,n] of MELO[bar%8]){if(R()<.12)continue;const up=pass%2===1&&R()<.4?12:0;felt(n+up,t+b*beat+(R()-.5)*.04,.085+R()*.02,4.5);}
+      if(R()<.3)felt([84,86,88,91][Math.floor(R()*4)],t+beat*(2+R()*1.5),.03,3);}
+  },
+  // 1. current: lofi jazz trio
+  jazz(ctx,dur){const K=kit(ctx),lp=bus(ctx,K,dur,2400,.22),beat=60/76;
+    const PROG=[[43,[58,62,65,69]],[36,[58,62,64,69]],[41,[57,60,64,67]],[38,[57,60,65,69]],[46,[57,62,65,69]],[45,[55,60,64,67]],[38,[57,60,62,65]],[43,[53,58,62,65]]];
+    const MEL=[65,67,69,72,74,77,79,81];
+    const ep=(m,t,d,p)=>{K.tone(lp,m,t,d,p,'sine',.012,0,.35);K.tone(lp,m,t,d,p*.3,'triangle',.012,6,.35);};
+    for(let st=0,t=.2;t<dur;st++,t+=beat/2){const e=st%8,[root,ch]=PROG[Math.floor(st/8)%8],tt=t+(e%2?beat*.09:0);
+      if(e===0||(e===5&&R()<.6))K.kick(lp,tt,.42);if(e===2||e===6)K.burst(lp,tt,.24,1700,.6,.09,.006);K.burst(lp,tt,.045,7600,1,e%2?.018:.03,.002,'highpass');
+      if(e===0)K.tone(lp,root,tt,beat*1.7,.34,'triangle',.02);else if(e===4)K.tone(lp,root+7,tt,beat*1.5,.3,'triangle',.02);else if(e===7&&R()<.7)K.tone(lp,root+(R()<.5?5:10),tt,beat*.45,.26,'triangle',.02);
+      if(e===0)for(const m of ch)ep(m,tt,beat*1.9,.05);if(e===3&&R()<.75)for(const m of ch)ep(m,tt,beat*1.1,.036);
+      if((e===1||e===5||e===6)&&R()<.33)ep(MEL[Math.floor(R()*8)],tt,beat*1.3,.045);if(R()<.1)K.burst(lp,tt+R()*.2,.008,2500+R()*3500,1,.025,.001);}
+  },
+  // 2. bossa nova: nylon-like guitar, clave rim clicks, shaker
+  bossa(ctx,dur){const K=kit(ctx),lp=bus(ctx,K,dur,3600,.2),six=60/132/2;
+    const PROG=[[41,[57,60,64,67]],[43,[58,62,65,69]],[36,[58,64,67,70]],[41,[57,60,64,69]],[45,[55,60,64,67]],[38,[54,60,62,66]],[43,[58,62,65,67]],[36,[58,62,64,70]]];
+    const GUIT=[0,3,6,10,12],CLAVE=[0,3,6,10,12];const MEL=[69,72,74,76,77,79,81];
+    const pluck=(m,t,p)=>{K.tone(lp,m,t,.9,p,'triangle',.004,0,.25);K.tone(lp,m+12,t,.35,p*.18,'sine',.003);};
+    for(let st=0,t=.2;t<dur;st++,t+=six){const e=st%16,bar=Math.floor(st/16)%8,[root,ch]=PROG[bar];
+      if(e===0)K.tone(lp,root,t,six*5,.36,'sine',.015);if(e===6)K.tone(lp,root+7,t,six*5,.3,'sine',.015);if(e===10&&R()<.5)K.tone(lp,root+7,t,six*3,.24,'sine',.015);
+      if(GUIT.includes(e))ch.forEach((m,i)=>pluck(m,t+i*.012,.06));
+      if((bar%2===0?CLAVE:[2,4,8,11,14]).includes(e))K.burst(lp,t,.03,2600,4,.06,.001);
+      K.burst(lp,t,.06,9000,1,e%2?.012:.022,.01,'highpass');
+      if(e%4===2&&R()<.35)pluck(MEL[Math.floor(R()*MEL.length)],t,.07);}
+  },
+  // 3. calm solo piano with room reverb, no drums
+  piano(ctx,dur){const K=kit(ctx),lp=bus(ctx,K,dur,4200,.38),beat=60/64;
+    const PROG=[[48,[64,67,71,74]],[45,[60,64,67,72]],[41,[57,60,64,69]],[43,[59,62,67,71]],[40,[59,64,67,71]],[45,[60,64,69,72]],[38,[57,62,65,69]],[43,[55,59,62,65]]];
+    const MEL=[72,74,76,79,81,83,84,86];
+    const pno=(m,t,p,d)=>{K.tone(lp,m,t,d||3.2,p,'sine',.006);K.tone(lp,m+12,t,(d||3.2)*.5,p*.22,'sine',.004);K.tone(lp,m+19,t,(d||3.2)*.25,p*.06,'sine',.003);};
+    for(let bar=0,t=.3;t<dur;bar++,t+=beat*4){const [root,ch]=PROG[bar%8];
+      pno(root-12,t,.11,4.5);pno(root,t,.07,4);
+      const arp=[0,1,2,3,2,1];arp.forEach((k,i)=>pno(ch[k],t+i*beat*.66,.05+R()*.015,2.6));
+      for(let j=0;j<3;j++)if(R()<.55)pno(MEL[Math.floor(R()*8)],t+beat*(.5+j*1.2+R()*.3),.075,3);}
+  },
+  // 4. chillhop beat: heavier drums, rhodes with tremolo, sub bass, vinyl crackle
+  chill(ctx,dur){const K=kit(ctx),lp=bus(ctx,K,dur,3000,.18),beat=60/84;
+    const trem=ctx.createGain(),lfo=ctx.createOscillator(),lg=K.amp(.25);trem.gain.value=.75;lfo.frequency.value=4.2;lfo.connect(lg);lg.connect(trem.gain);lfo.start(0);trem.connect(lp);
+    const PROG=[[45,[60,64,67,71]],[41,[57,60,64,67]],[38,[57,60,62,65]],[40,[56,59,62,64]]];
+    for(let st=0,t=.2;t<dur;st++,t+=beat/2){const e=st%16,[root,ch]=PROG[Math.floor(st/16)%4],tt=t+(e%2?beat*.11:0);
+      if(e===0||e===7||e===10)K.kick(lp,tt,.6);
+      if(e===4||e===12){K.burst(lp,tt,.28,1500,.5,.2,.004);K.tone(lp,57,tt,.12,.08,'triangle',.002);}
+      K.burst(lp,tt,.04,8000,1,e%2?.02:.04,.002,'highpass');
+      if(e===0)for(const m of ch){K.tone(trem,m,tt,beat*7.5,.045,'sine',.03,0,.6);K.tone(trem,m,tt,beat*7.5,.012,'triangle',.03,8,.6);}
+      if(e===0)K.tone(lp,root-12,tt,beat*3,.45,'sine',.02);if(e===10)K.tone(lp,root-5,tt,beat*2,.38,'sine',.02);
+      if(R()<.5)K.burst(lp,t+R()*.3,.006,2000+R()*5000,1,.03+R()*.03,.001);
+      if(e===14&&R()<.5)K.tone(lp,ch[3]+12,tt,beat*1.5,.04,'sine',.01);}
+  }
+};
+async function render(name,dur){
+  const ctx=new OfflineAudioContext(2,44100*dur,44100);SONGS[name](ctx,dur);
+  const buf=await ctx.startRendering();const L=buf.getChannelData(0),Rr=buf.getChannelData(1),n=L.length;
+  let peak=0;for(let i=0;i<n;i++)peak=Math.max(peak,Math.abs(L[i]),Math.abs(Rr[i]));const g=.89/(peak||1);
+  const ab=new ArrayBuffer(44+n*4),v=new DataView(ab);const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF');v.setUint32(4,36+n*4,true);ws(8,'WAVE');ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,2,true);v.setUint32(24,44100,true);v.setUint32(28,44100*4,true);v.setUint16(32,4,true);v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,n*4,true);
+  for(let i=0,o=44;i<n;i++,o+=4){v.setInt16(o,Math.max(-1,Math.min(1,L[i]*g))*32767,true);v.setInt16(o+2,Math.max(-1,Math.min(1,Rr[i]*g))*32767,true);}
+  let s='';const u=new Uint8Array(ab);for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);
+}
+</script>
