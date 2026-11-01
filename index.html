@@ -261,6 +261,19 @@ body:not(.is-seated) .cafe-now{bottom:calc(150px + env(safe-area-inset-bottom,0p
 .feed .fi button{border:0;border-radius:999px;background:var(--lamp);color:var(--lamp-ink);font:600 12px var(--f-ui);padding:6px 10px;cursor:pointer;white-space:nowrap}
 .feed .fi button[disabled]{opacity:.55}
 @keyframes fin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.cr-btn,.lunch-btn{display:none;position:fixed;z-index:5;left:max(16px,env(safe-area-inset-left,0px));padding:10px 14px;border-radius:999px;color:var(--paper);font:600 13px var(--f-ui);cursor:pointer}
+.is-seated .cr-btn{display:block;bottom:calc(var(--dock-h,0px) + 84px)}
+.is-seated .lunch-btn{display:block;bottom:calc(var(--dock-h,0px) + 134px)}
+body.on-lunch .cr-btn,body.on-lunch .lunch-btn,body.on-lunch .mood-btn,body.on-lunch #lookL,body.on-lunch #lookR{display:none!important}
+.lunch-card{position:fixed;z-index:9;left:16px;right:16px;margin:0 auto;max-width:360px;top:42%;transform:translateY(-50%);border-radius:18px;padding:20px 18px 18px;text-align:center;color:var(--paper);background:rgba(24,19,38,.94)}
+.lunch-card[hidden]{display:none}
+.lunch-card b{font-family:var(--f-display);font-size:19px}
+.lunch-card p{margin:8px 0 14px;font-size:13.5px;line-height:1.55;color:var(--muted)}
+.lc-btns{display:flex;gap:8px;justify-content:center}.lc-btns[hidden]{display:none}
+.lc-btns button{flex:1;border:0;border-radius:12px;padding:12px 8px;background:rgba(255,255,255,.1);color:var(--paper);font:600 14px var(--f-ui);cursor:pointer}
+.lc-btns button.main,.lc-btns button:hover{background:var(--lamp);color:var(--lamp-ink)}
+.lc-x{position:absolute;top:6px;right:8px;border:0;background:transparent;color:var(--muted);font-size:22px;cursor:pointer}
+body.on-lunch .lc-x{display:none}
 .mood-btn{position:fixed;z-index:5;left:max(16px,env(safe-area-inset-left,0px));top:calc(50% - 30px);padding:10px 14px;border-radius:999px;color:var(--paper);font:600 13px var(--f-ui);cursor:pointer}
 .mood-btn.on{background:rgba(255,170,190,.9);color:#4a1a2a;border-color:transparent}
 .is-seated .mood-btn{top:auto;bottom:calc(var(--dock-h,0px) + 34px)}
@@ -467,6 +480,12 @@ body:not(.is-seated) .cafe-now{bottom:calc(150px + env(safe-area-inset-bottom,0p
 </section>
 <div id="personPop" class="person-pop glass" hidden role="dialog" aria-labelledby="ppName"><b id="ppName"></b><div class="pp-btns"><button id="ppDm" type="button">💬 1:1 대화</button><button id="ppCoffee" type="button">☕ 커피 사주기</button><button id="ppCheer" type="button">👏 응원</button><button id="ppComfort" type="button">💛 위로</button><button id="ppMute" type="button">🔇 숨기기</button></div></div>
 <button id="moodBtn" class="mood-btn glass" type="button" aria-pressed="false">🥺 힘들어요</button>
+<button id="crBtn" class="cr-btn glass" type="button">☕ 커피 사오기</button>
+<button id="lunchBtn" class="lunch-btn glass" type="button">🍱 점심 먹고 오기</button>
+<div id="lunchCard" class="lunch-card glass" hidden role="dialog" aria-labelledby="lcT"><b id="lcT">🍱 점심 먹고 올게요</b><p id="lcP">얼마나 다녀올까요? 그동안 자리를 맡아두고 공부 시간은 멈춰요.</p>
+<div id="lcPick" class="lc-btns"><button type="button" data-min="30">30분</button><button type="button" data-min="60">1시간</button><button type="button" data-min="90">1시간 30분</button></div>
+<div id="lcBack" class="lc-btns" hidden><button type="button" id="lcReturn" class="main">돌아왔어요</button></div>
+<button type="button" id="lcClose" class="lc-x" aria-label="닫기">×</button></div>
 <div id="feed" class="feed" aria-live="polite"></div>
 <div id="toast" class="toast glass show" role="status" aria-live="polite">꿈을 이루는 열람실, <b>꿈이룸</b>에 들어왔어요. <b>자리잡기</b>를 누르면 가장 가까운 빈자리로 안내해요. </div>
 
@@ -599,6 +618,33 @@ function setMood(on){moodAt=on?Date.now():0;store.set('mood',moodAt);syncMood();
   if(on){sendEv({k:'tired'});toast('같은 방 사람들에게 알렸어요. 잠깐 숨 돌려요 🌙',3200);}else toast('다시 힘내요! 💪',2000);}
 function syncMood(){const b=$('moodBtn');if(!b)return;const on=moodOn();b.classList.toggle('on',!!on);b.textContent=on?'💛 위로받는 중':'🥺 힘들어요';b.setAttribute('aria-pressed',String(!!on));}
 setInterval(()=>{if(moodAt&&!moodOn()){moodAt=0;store.set('mood',0);syncMood();lastPres='';}},30000);
+let lunchUntil=(()=>{const v=store.get('lunch',0)|0;return v&&Date.now()-v<3*3600e3?v:0;})();
+let crun=null,myCup=(()=>{const v=store.get('mycup',null);return !!(v&&v.d===kstDay(Date.now()));})();
+const fmtHM=ts=>new Date(ts).toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
+function syncLunch(){document.body.classList.toggle('on-lunch',!!lunchUntil);const c=$('lunchCard');if(!c)return;
+  if(lunchUntil){c.hidden=false;$('lcT').textContent='🍱 맛있게 드세요!';$('lcP').textContent=`${fmtHM(lunchUntil)}까지 자리를 맡아둘게요. 공부 시간은 잠깐 멈춰 있어요.`;$('lcPick').hidden=true;$('lcBack').hidden=false;}
+  else{$('lcT').textContent='🍱 점심 먹고 올게요';$('lcP').textContent='얼마나 다녀올까요? 그동안 자리를 맡아두고 공부 시간은 멈춰요.';$('lcPick').hidden=false;$('lcBack').hidden=true;}}
+function startLunch(min){if(!me.seat)return;if(crun)crun=null;tickStudy(Date.now());lunchUntil=Date.now()+min*60e3;store.set('lunch',lunchUntil);lastPres='';try{sendPresence(true);}catch(e){}syncLunch();saveResume();}
+function endLunch(quiet){if(!lunchUntil)return;lunchUntil=0;store.set('lunch',0);if(sess)sess.last=Date.now();lastPres='';try{sendPresence(true);}catch(e){}$('lunchCard').hidden=true;syncLunch();$('lunchCard').hidden=true;if(!quiet)toast('다시 집중해 볼까요? 💪 공부 시간이 이어져요',2400);}
+const CAFE_PT=()=>[Math.sin(.96)*19.7,Math.cos(.96)*19.7];
+function cancelRun(msg){if(!crun)return;crun=null;try{lastPres='';}catch(e){}if(msg)toast(msg,2600);}
+function startRun(){if(!me.seat||crun||lunchUntil||!T3)return;const id=me.seat.id,now=Date.now();
+  crun={seat:id,stage:'go',t:now,sess:sess?{start:sess.start,sec:sess.sec}:null,mode,phase,phaseEnd,pomoCount};
+  tickStudy(now);stand(true);
+  lastSit={seat:id,start:crun.sess?crun.sess.start:now,min:Math.floor((crun.sess?crun.sess.sec:0)/60),room:roomId,day:kstDay(now)};
+  const [x,z]=CAFE_PT();setTimeout(()=>{if(crun)walkTo3(x,z);},80);toast('☕ 잠깐 커피 사러 다녀올게요! 자리는 맡아둘게요',2600);lastPres='';}
+function coffeeRunTick(){if(!crun)return;const now=Date.now();
+  if(now-crun.t>120000&&crun.stage!=='order'){cancelRun('커피 사러 가는 길이 막혔어요. 자리를 다시 눌러 주세요.');return;}
+  if(crun.stage==='go'){if(now-crun.t>500&&!path3.length){const [x,z]=CAFE_PT();
+      if(Math.hypot(me3.x-x,me3.z-z)<1.7){crun.stage='order';crun.t=now;const bx=Math.sin(.96)*21.3,bz=Math.cos(.96)*21.3;me3.ry=Math.atan2(-(bx-me3.x),-(bz-me3.z));toast('☕ 바리스타가 커피를 내리고 있어요…',2800);chime(1);}
+      else walkTo3(x,z);}}
+  else if(crun.stage==='order'){if(now-crun.t>3000){crun.stage='back';crun.t=now;myCup=true;store.set('mycup',{d:kstDay(now)});lastPres='';goSeat3(crun.seat);toast('☕ 커피 받았어요! 자리로 돌아갈게요',2200);}}
+  else if(crun.stage==='back'){
+    if(me.seat&&me.seat.id===crun.seat){if(crun.sess&&sess){sess.start=crun.sess.start;sess.sec=crun.sess.sec;sess.last=now;}
+      if(crun.mode==='pomo'&&mode==='pomo'){phase=crun.phase;phaseEnd=crun.phaseEnd;pomoCount=crun.pomoCount;}
+      crun=null;lastPres='';renderTicket();saveResume();toast('☕ 따뜻한 커피와 함께 다시 집중!',2400);}
+    else if(!pend3&&!path3.length&&!me.seat&&now-crun.t>900)cancelRun('그 사이 자리에 다른 분이 앉았어요. 빈자리를 골라 주세요.');}
+}
 let coffeesToday=(()=>{const v=store.get('coffees',null);return v&&v.d===kstDay(Date.now())?v.n|0:0;})();
 let cheersToday=(()=>{const v=store.get('cheers',null);return v&&v.d===kstDay(Date.now())?v.n|0:0;})();
 
@@ -1229,6 +1275,7 @@ const FOCUS=25*60e3,BREAK=5*60e3;
 function startPhase(p,now){phase=p;phaseEnd=now+(p==='focus'?FOCUS:BREAK);}
 function tickStudy(now){
   if(!me.seat||!sess)return;
+  if(lunchUntil){sess.last=now;return;}
   const dt=Math.max(0,(now-sess.last)/1000);sess.last=now;
   if(mode==='pomo'&&now>=phaseEnd){
     if(phase==='focus'){pomoCount++;startPhase('break',now);chime(2);toast(`25분 집중 ${pomoCount}회 완료. 5분 쉬어가요.`);}
@@ -1253,6 +1300,7 @@ function sit(s){
 let lastSit=(()=>{const v=store.get('lastSit',null);return v&&typeof v.seat==='string'&&num(v.start)!==null&&num(v.min)!==null&&v.day===kstDay(Date.now())?v:null;})();
 function stand(silent){
   if(!me.seat)return;
+  if(lunchUntil)endLunch(true);
   if(!silent)knock(true);
   tickStudy(Date.now());saveToday();
   const s=me.seat,sec=sess?sess.sec:0;
@@ -1690,6 +1738,8 @@ function drawTags(){
     let btop=top;
     const say=p.say&&now-p.say.ts<6000&&!(p.peer&&muted.has(p.peer))?p.say:null;
     if(say)btop=sayBubble(sx,top,say);
+    else if(p.isMe?lunchUntil:p.lu)btop=sayBubble(sx,top,{t:'🍱 점심 먹는 중 · '+fmtHM(p.isMe?lunchUntil:p.lu)+' 복귀',ts:now});
+    else if(p.isMe?crun:p.cr)btop=sayBubble(sx,top,{t:(p.isMe?(crun.stage==='back'):p.cr===2)?'☕ 커피 들고 자리로':'☕ 커피 사러 가는 중',ts:now});
     else if(p.isMe?moodOn():p.md)btop=sayBubble(sx,top,{t:p.isMe?'🥺 힘들어요 · 위로를 기다려요':'🥺 힘들어요 · 눌러서 위로해 주세요',ts:now});
     else if(gl||tp){const g2=gl&&gl.length>14?gl.slice(0,13)+'…':gl;btop=bubble(sx,top,tp&&tp[1]?(tp[0]>=tp[1]?`🏆 ${tp[0]}/${tp[1]} 완료`:`✅ ${tp[0]}/${tp[1]}`+(g2?` · ${g2}`:'')):g2);}
     const b=p.burst;
@@ -1957,8 +2007,8 @@ function step3(dt){
   if(keys.has('left'))me3.ry+=2.2*dt;if(keys.has('right'))me3.ry-=2.2*dt;
   const fx=-Math.sin(me3.ry),fz=-Math.cos(me3.ry);let moved=false;
   let fw=(keys.has('up')?1:0)-(keys.has('down')?1:0);
-  if(fw){path3=[];pend3=null;const sp=1.8*dt*fw;const r=moveFree(me3.x,me3.z,fx*sp,fz*sp);me3.x=r[0];me3.z=r[1];moved=r[2];mySpeed=1.8;}
-  else if(joy.x||joy.y){path3=[];pend3=null;const cy=T3.camYaw??me3.ry,cfx=-Math.sin(cy),cfz=-Math.cos(cy),vx=cfx*-joy.y+cfz*-joy.x*-1,vz=cfz*-joy.y-cfx*-joy.x*-1,l=Math.hypot(vx,vz)||1,mag=Math.min(1,Math.hypot(joy.x,joy.y)),sp=2.0*mag*dt;
+  if(fw){if(crun)cancelRun('커피 사오기를 그만뒀어요.');path3=[];pend3=null;const sp=1.8*dt*fw;const r=moveFree(me3.x,me3.z,fx*sp,fz*sp);me3.x=r[0];me3.z=r[1];moved=r[2];mySpeed=1.8;}
+  else if(joy.x||joy.y){if(crun)cancelRun('커피 사오기를 그만뒀어요.');path3=[];pend3=null;const cy=T3.camYaw??me3.ry,cfx=-Math.sin(cy),cfz=-Math.cos(cy),vx=cfx*-joy.y+cfz*-joy.x*-1,vz=cfz*-joy.y-cfx*-joy.x*-1,l=Math.hypot(vx,vz)||1,mag=Math.min(1,Math.hypot(joy.x,joy.y)),sp=2.0*mag*dt;
     const r=moveFree(me3.x,me3.z,vx/l*sp,vz/l*sp);me3.x=r[0];me3.z=r[1];moved=r[2];me3.ry=angLerp(me3.ry,Math.atan2(-vx,-vz),1-Math.exp(-dt*10));mySpeed=2.0*mag;}
   else if(path3.length){
     const p=path3[0],dx=p.x-me3.x,dz=p.z-me3.z,d=Math.hypot(dx,dz),rem=pathLen(me3.x,me3.z,path3);
@@ -1989,7 +2039,7 @@ function render3d(t){
   if(wasSeat&&!me.seat){const s3=SEAT3D.get(wasSeat);if(s3){me3.x=s3.x+Math.sin(s3.face)*.7;me3.z=s3.z+Math.cos(s3.face)*.7;me3.ry=s3.face;}}
   if(!wasSeat&&me.seat){camOff=0;}
   wasSeat=me.seat?me.seat.id:null;
-  const moving=step3(dt);stepWander(dt);
+  const moving=step3(dt);stepWander(dt);coffeeRunTick();
   {const [x2,y2]=to2d(me3.x,me3.z);me.x=x2;me.y=y2;me.moving=moving;const a=me3.ry;me.dir=Math.abs(Math.sin(a))>Math.abs(Math.cos(a))?(Math.sin(a)<0?'right':'left'):(Math.cos(a)<0?'down':'up');}
   if(T3.mk.material.opacity>0)T3.mk.material.opacity=Math.max(0,T3.mk.material.opacity-dt*.9);
   if(!T3.glowT||t-T3.glowT>.4){T3.glowT=t;for(const [id,g] of T3.freeGlow){const st=seatById.get(id);g.visible=!me.seat&&isSeatFree(st);}}
@@ -2011,6 +2061,9 @@ function render3d(t){
     else{const [x,z]=from2d(p.x,p.y);const px=a.px??x,pz=a.pz??z,v=Math.hypot(x-px,z-pz)/Math.max(dt,.001);walking=v>.25||p.remoteMoving;speed=Math.min(9,v);a.px=x;a.pz=z;a.g.position.set(x,-.17,z);
       const want=p.ry3!=null?p.ry3:(walking?Math.atan2(-(x-(a.ox??x)),-(z-(a.oz??z))):a.ry??Math.PI);a.ox=x;a.oz=z;a.ry=angLerp(a.ry??want,want,1-Math.exp(-dt*9));a.g.rotation.y=a.ry;}
     poseLimbs(a,walking,speed,t,!!s3);
+    a.g.visible=!(p.isMe?lunchUntil:p.lu);
+    {const hold=!s3&&(p.isMe?(crun&&crun.stage==='back'):(p.cr===2));if(hold&&!a.handCup){a.handCup=new three.Group();T3.add(new three.CylinderGeometry(.05,.045,.11,12),T3.M(0xf3ece0),0,0,0,{parent:a.handCup});T3.add(new three.CylinderGeometry(.052,.052,.03,12),T3.M(0x8a5a3c),0,.045,0,{parent:a.handCup});a.handCup.position.set(0,-.32,-.04);a.armR.add(a.handCup);}
+     if(a.handCup)a.handCup.visible=!!hold;if(hold){a.armR.rotation.x=-1.25;}}
     if(!s3)a.head.rotation.x=reduceMotion||walking?0:Math.max(0,Math.sin(t*.9+off))*.12;
     a.g.position.y+=reduceMotion?0:walking?Math.abs(Math.sin(a.walkPh))*.05:Math.sin(t*2+off)*.006;
     if(s3&&!reduceMotion)seatedLife(a,key,t,off,s3);
@@ -2018,9 +2071,13 @@ function render3d(t){
   }
   for(const [k,a] of actors)if(!seen.has(k)){T3.scene.remove(a.g);actors.delete(k);}
   // desks of people who are studying get their books and notebook
-  if(!T3.propT||t-T3.propT>.3){T3.propT=t;const busy=new Map();for(const n of NPCS)if(n.seat)busy.set(n.seat.id,0);for(const p of peers.values())if(p.seat)busy.set(p.seat.id,p.cf||0);if(me.seat)busy.set(me.seat.id,coffeesToday);
+  if(!T3.propT||t-T3.propT>.3){T3.propT=t;const busy=new Map();for(const n of NPCS)if(n.seat)busy.set(n.seat.id,0);for(const p of peers.values())if(p.seat)busy.set(p.seat.id,(p.cf||0)+(p.mc?1:0));
+    const lunchSeats=new Set();if(me.seat&&lunchUntil)lunchSeats.add(me.seat.id);for(const p of peers.values())if(p.seat&&p.lu)lunchSeats.add(p.seat.id);T3.lunchSeats=lunchSeats;if(me.seat)busy.set(me.seat.id,coffeesToday+(myCup?1:0));
     for(const [id,cf] of busy){let pr=T3.PROPS.get(id);if(!pr){pr=T3.makeProps(id);T3.PROPS.set(id,pr);}pr.g.visible=true;pr.mug.visible=cf>0||id[0]==='K'||((id.charCodeAt(1)+id.length)%3===0);if(id[0]==='L')pr.g.visible=false;}
-    for(const [id,pr] of T3.PROPS)if(!busy.has(id))pr.g.visible=false;}
+    for(const [id,pr] of T3.PROPS)if(!busy.has(id))pr.g.visible=false;
+    for(const [id,pr] of T3.PROPS){const on=T3.lunchSeats.has(id)&&pr.g.visible;if(on&&!pr.sign){const tx=document.createElement('canvas');tx.width=256;tx.height=128;const g=tx.getContext('2d');g.fillStyle='#fbf3e2';g.fillRect(0,0,256,128);g.strokeStyle='#c9a45c';g.lineWidth=8;g.strokeRect(4,4,248,120);g.fillStyle='#2b1b04';g.font='700 40px sans-serif';g.textAlign='center';g.fillText('🍱 점심시간',128,62);g.font='26px sans-serif';g.fillText('곧 돌아올게요',128,102);const tt=new three.CanvasTexture(tx);tt.colorSpace=three.SRGBColorSpace;
+        pr.sign=new three.Mesh(new three.PlaneGeometry(.36,.18),new three.MeshBasicMaterial({map:tt,side:three.DoubleSide}));pr.sign.position.set(0,.14,.05);pr.sign.rotation.x=-.25;pr.g.add(pr.sign);}
+      if(pr.sign)pr.sign.visible=on;}}
   // camera: third person behind my back (seated: in front so faces show), drag turns, pinch / wheel zooms
   const mine=seat3(me);
   if(mine&&panX){camOff+=(panX-lastPanX)*-.0065;lastPanX=panX;}
@@ -2107,7 +2164,7 @@ function handleTap(cx,cy){
   const h3=pick3d(cx,cy);
   if(h3&&h3.peer){const p=peers.get(h3.peer);if(p){const [sx,sy]=tagPos(p);openPerson(p,sx,sy);return;}}
   if(h3&&h3.seat){const s3=seatById.get(h3.seat);if(me.seat){if(s3!==me.seat)toast('다른 자리로 옮기려면 먼저 일어나 주세요.');return;}if(!isSeatOpen(s3)){toast('이미 누가 앉아 있는 자리예요.');return;}goSeat3(h3.seat);return;}
-  if(h3&&h3.floor){if(me.seat){seatedHint();return;}pend3=null;walkTo3(h3.point.x,h3.point.z);marker3(h3.point);return;}
+  if(h3&&h3.floor){if(me.seat){seatedHint();return;}if(crun)cancelRun('커피 사오기를 그만뒀어요.');pend3=null;walkTo3(h3.point.x,h3.point.z);marker3(h3.point);return;}
   if(h3&&h3.cafe){toast('카페는 2D 꿈이룸에 있어요. 커피는 사람을 눌러서 사줄 수 있어요.');return;}
   return;
   const wx=cx/zoom+camL,wy=cy/zoom+camT;
@@ -2271,7 +2328,7 @@ function syncPeers(list){
     r.goal=typeof pr.g==='string'?cleanText(pr.g,24):'';
     r.since=num(pr.t)||0;
     r.ry3=num(pr.ry);
-    r.md=pr.md===1;
+    r.md=pr.md===1;r.cr=pr.cr===1||pr.cr===2?pr.cr:0;r.mc=pr.mc===1;r.lu=num(pr.lu)||0;
     r.cf=num(pr.cf)!==null?clamp(pr.cf|0,0,99):0;
     r.pk=typeof pr.pk==='string'&&pr.pk.length>40&&pr.pk.length<200?pr.pk:null;
     r.tp=Array.isArray(pr.tp)&&pr.tp.length===2?[Math.max(0,pr.tp[0]|0),Math.max(0,pr.tp[1]|0)]:null;
@@ -2284,6 +2341,7 @@ function syncPeers(list){
       r.x=r.tx=ghostAt.cx;r.y=r.ty=ghostAt.cy+4;r.hasPos=true;r.dir=ghostAt.dir;r.remoteMoving=false;
       ghostSeat.set(ghostAt.id,r);
     }else if(r.seat&&!othersSeat.has(r.seat.id))othersSeat.set(r.seat.id,r);
+    if(!ghostAt&&r.cr&&typeof pr.ls==='string'){const gs=seatById.get(pr.ls);if(gs&&!othersSeat.has(gs.id)&&!ghostSeat.has(gs.id))ghostSeat.set(gs.id,r);}
   }
   for(const k of [...peers.keys()])if(!seen.has(k))peers.delete(k);
   // two people on one seat: whoever sat first keeps it
@@ -2351,6 +2409,9 @@ function sendPresence(force,away){
   if(typeof me3!=='undefined')pres.ry=Math.round(me3.ry*100)/100;
   if(coffeesToday)pres.cf=coffeesToday;
   if(moodOn())pres.md=1;
+  if(crun)pres.cr=crun.stage==='back'?2:1;
+  if(myCup)pres.mc=1;
+  if(lunchUntil)pres.lu=lunchUntil;
   if(!me.seat&&lastSit&&lastSit.room===roomId&&lastSit.day===kstDay(Date.now())){pres.ls=lastSit.seat;pres.lt=lastSit.start;pres.lm=lastSit.min;pres.lg=goal;}
   const key=JSON.stringify(pres),now=Date.now();
   if(force!==true&&(key===lastPres?now-lastWrite<4000:now-lastSend<140))return;
@@ -2612,6 +2673,12 @@ function start(data){
 }
 $('cafeNext').addEventListener('click',()=>{ensureAudio();if(layers.cafebgm){cafeSkip=true;}else{cafeStyle=(cafeStyle+1)%CAFE_STYLES.length;syncCafeNow();}toast(`♪ 다음 곡으로 넘어가요`,1500);});
 $('moodBtn').addEventListener('click',()=>setMood(!moodOn()));syncMood();
+$('crBtn').addEventListener('click',startRun);
+$('lunchBtn').addEventListener('click',()=>{syncLunch();$('lunchCard').hidden=false;});
+$('lcPick').addEventListener('click',e=>{const b=e.target.closest('[data-min]');if(b)startLunch(+b.dataset.min);});
+$('lcReturn').addEventListener('click',()=>endLunch());
+$('lcClose').addEventListener('click',()=>{if(!lunchUntil)$('lunchCard').hidden=true;});
+syncLunch();if(!lunchUntil)$('lunchCard').hidden=true;
 start(resume||{});
 // seat card: swipe down to shrink, swipe up or tap to open
 (()=>{
