@@ -8,6 +8,12 @@ Tools for the "every 2 days" personal-vlog videos of kumiroom.com (꿈이룸). T
 - 9:16 vertical, 1080×1920, 24 fps, about 35–50 s. Handwritten-style captions (Gaegu font) that match the narration word timings. A small date sticker in the corner, little paper stickers for key moments.
 - **Sound:** ElevenLabs narration (Korean, eleven_v4, a voice that fits the person; vary voices between videos). The campfire must be exactly the site's campfire: use `fire.js`. **Never** redesign it, never add noise beds that sound like wind. The owner was upset when it changed: keep the sound they like. Music is soft and low, under the voice (sidechain-ducked).
 - **On screen:** only MY nickname is visible, never other people's names. No bottom-left joystick circle. Characters face the camera when it matters, so the camera goes on the tree side to show faces. Goals float above heads. Hide the top HUD counters, because the counts are fake in a local room.
+- **Scenes flow into each other naturally: NO black or white screens, no fades to black, no flashes, no hard cuts, no teleporting.** The owner said this explicitly.
+  - The camera moves continuously. Every special shot blends in and out of the live game camera (see `SHOTS` in `examples/toeic/scene.js`: position lerp plus quaternion slerp over about 1.3 s).
+  - The character really walks everywhere: into the hall, to the seat, to the cafe and back.
+  - To keep walks short, speed the world up while walking (`window.__speedAt` returns 2.2 during walks; `build_page.py` sub-steps it). That is a natural time-lapse, not a cut.
+  - Time jumps ("1시간 뒤") are shown with a sticker plus the timer changing, never with a screen transition.
+  - Drive actions from state, not fixed times. For example, pick the drink once `crun.stage==='menu'` has lasted about 1 s.
 - Do not change the website from this task. If you find a site bug, mention it in the report instead.
 
 ## Pipeline
@@ -17,7 +23,7 @@ Tools for the "every 2 days" personal-vlog videos of kumiroom.com (꿈이룸). T
    2. `creative_generate_speech` (eleven_v4) once for the whole script, with blank lines between lines.
    3. Download the finished take with curl from its content_url.
    4. `creative_add_flow_asset_node` with the generation_id.
-   5. `creative_transcribe_audio` (eleven_scribe_v1) to get per-word start/end. Those times drive the scene timeline. Start the voice at 1.0 s in the video.
+   5. `creative_transcribe_audio` (eleven_scribe_v1) to get per-word start/end. Those times drive the scene timeline. Start the voice at 1.0 s in the video. Place each narration line where its scene happens: cut the take into lines with the word timings and delay each one (see `examples/toeic/mix.filter`), so scenes can take the time they need.
 3. **Scene.** Copy `examples/toeic/scene.js` and edit it. It runs inside the real page (same scope as the site code), so you can call site functions directly:
    - Walking: `walkTo3(x,z)`, `goSeat3(id)`. Or sit at once: `path3=[];pend3=id`.
    - Cafe: `startRun()`, then click `#mnPick [data-d="latte"]` when the menu card shows.
