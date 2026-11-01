@@ -1365,23 +1365,11 @@ const LAYERS={
     return {src,timers};
   },
   fire(out){
-    // campfire: burning wood knocks and pops (each one a tiny ringing "tok"/"pak" with a woody body), coming in irregular little flurries.
-    // no continuous noise at all, so nothing can sound like wind or crinkly paper.
-    const sr=ac.sampleRate,secs=16,len=Math.round(sr*secs),bf=ac.createBuffer(2,len,sr),L=bf.getChannelData(0),Rt=bf.getChannelData(1),tmp=new Float32Array(Math.round(sr*.4));
-    const ev=(t,f,tau,a,pan)=>{const i0=Math.round(t*sr);if(i0>=len)return;const n=Math.min(len-i0,tmp.length,Math.round(tau*sr*7)),r=Math.exp(-1/(tau*sr)),c=2*r*Math.cos(2*Math.PI*f/sr),r2=r*r,ex=Math.max(3,Math.round(sr*(.00015+Math.random()*.0005)));
-      let y1=0,y2=0,pk=1e-9;for(let i=0;i<n;i++){const x=i<ex?(Math.random()*2-1):0,y=c*y1-r2*y2+x;y2=y1;y1=y;tmp[i]=y;const q=Math.abs(y);if(q>pk)pk=q;}
-      const fade=Math.min(n,64);for(let i=0;i<n;i++){const v=tmp[i]/pk*a*(i>n-fade?(n-i)/fade:1);L[i0+i]+=v*(1-pan*.4);Rt[i0+i]+=v*(1+pan*.4);}};
-    const one=(t,small)=>{const r=Math.random(),pan=Math.random()*1.4-.7;
-      if(small||r<.5)ev(t,600+Math.random()*1000,.004+Math.random()*.005,(small?.12:.22)+Math.random()*.2,pan);
-      else if(r<.78)ev(t,1700+Math.random()*1400,.0015+Math.random()*.002,.15+Math.random()*.18,pan);
-      else if(r<.97)ev(t,230+Math.random()*300,.012+Math.random()*.014,.45+Math.random()*.3,pan);
-      else ev(t,75+Math.random()*45,.045+Math.random()*.02,.4,pan);};
-    let t=.05;
-    while(t<secs-.6){t+=-Math.log(1-Math.random())/4.2;one(t,false);
-      if(Math.random()<.13){let tt=t;for(let k=5+Math.floor(Math.random()*9);k>0;k--){tt+=.02+Math.random()*.06;one(tt,true);}}}
-    for(let i=0;i<600;i++){const g=i/600;L[i]*=g;Rt[i]*=g;L[len-1-i]*=g;Rt[len-1-i]*=g;}
-    const src=[loop(bf,filt('highpass',90),filt('lowpass',5200),amp(.95),out)];
-    return {src,timers:[]};
+    const src=[];
+    const crackle=()=>{const t=ac.currentTime;for(let n=R()<.55?1+Math.floor(R()*3):0;n>0;n--)burst(out,t+R()*.09,.004+R()*.008,1800+R()*5500,2.2,.08+R()*.26,.001);
+      if(R()<.12)burst(out,t+R()*.05,.03,600+R()*500,2,.12+R()*.1,.002);};
+    const pop=()=>{const t=ac.currentTime+R()*.5;if(R()<.18){burst(out,t,.06,900+R()*1400,1.5,.3+R()*.15,.002);for(let n=2+Math.floor(R()*5);n>0;n--)burst(out,t+.03+R()*.35,.006+R()*.01,3000+R()*4500,2,.05+R()*.12,.001);}};
+    return {src,timers:[setInterval(crackle,80),setInterval(pop,650)]};
   },
   white(out){return {src:[loop(NB.white,filt('lowpass',9000),amp(.45),out)],timers:[]};},
   birds(out){
